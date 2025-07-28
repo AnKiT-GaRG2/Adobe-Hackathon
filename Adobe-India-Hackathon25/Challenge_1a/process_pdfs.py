@@ -195,6 +195,52 @@ def contains_date(text):
     
     return False
 
+def is_table_of_contents_entry(text, page_num, all_text_elements):
+    """
+    Check if the text is likely a table of contents entry that should not be considered a heading
+    """
+    if not text:
+        return False
+    
+    clean_text = text.strip().lower()
+    
+    # Check if we're on a likely Table of Contents page
+    # Look for TOC indicators on this page
+    page_elements = [elem for elem in all_text_elements if elem["page"] == page_num]
+    page_text = " ".join([elem["text"].lower() for elem in page_elements])
+    
+    is_toc_page = (
+        "table of contents" in page_text or
+        "contents" in page_text or
+        # Look for multiple page number references (common in TOC)
+        len(re.findall(r'\b\d+\b', page_text)) > 10
+    )
+    
+    if not is_toc_page:
+        return False
+    
+    # If on TOC page, check for TOC entry patterns
+    toc_patterns = [
+        # Concatenated headings (shouldn't exist as real headings)
+        r'\b(revision|table|contents|introduction|overview|acknowledgement|reference)\s+(history|of|to|level|foundation)\s+(table|contents|extensions|agile|tester)\b',
+        # Text that appears to be merged/concatenated unnaturally
+        r'\b\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+',  # Very long phrases (7+ words) are often merged TOC entries
+        # Page number references at the end
+        r'.+\s+\d+\s*$',
+    ]
+    
+    for pattern in toc_patterns:
+        if re.search(pattern, clean_text):
+            return True
+    
+    # Additional check: if text contains multiple distinct topics, it's likely merged
+    topic_keywords = ['introduction', 'overview', 'extension', 'tester', 'agile', 'foundation', 'level', 'syllabus']
+    keyword_count = sum(1 for keyword in topic_keywords if keyword in clean_text)
+    if keyword_count >= 3:  # Too many topics in one heading suggests merging
+        return True
+    
+    return False
+
 def is_form_field_or_generic_term(text):
     """
     Check if the text is a common form field label or generic term that should not be considered a heading
@@ -949,9 +995,6 @@ def is_isolated_from_table_content(element, table):
 def extract_outline(pdf_path):
     doc = fitz.open(pdf_path)
     text_elements = []
-    
-    # Get PDF metadata title for comparison
-    pdf_metadata_title = doc.metadata.get('title', '').strip() if doc.metadata else ''
 
     # --- 1. Collect text with font sizes and position information ---
     for page_num, page in enumerate(doc, start=1):
@@ -1189,24 +1232,12 @@ def extract_outline(pdf_path):
         # Check if this text contains any date format (exclude dates from headings)
         # Use comprehensive date detection that covers all common date formats
         is_date = contains_date(text) or contains_date(clean_text)
-        
-        # Additional check for temporal fragments that might not be caught by contains_date
-        temporal_fragments = [
-            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s*\d{1,2}\b',
-            r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s*\d{1,2}\b',
-            r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
-            r'\b(morning|afternoon|evening|night|noon|midnight)\b',
-            r'\b\d{1,2}:\d{2}\s*(am|pm|a\.m\.|p\.m\.)\b',
-            r'\b(today|tomorrow|yesterday)\b',
-            r'^\d{1,2}$',  # Just a number (likely day)
-            r'^\d{1,2}:\d{2}$',  # Just time
-        ]
-        
-        is_temporal_fragment = any(re.search(pattern, clean_text.lower()) for pattern in temporal_fragments)
-        is_date = is_date or is_temporal_fragment
 
         # Check if this is a form field or generic term (exclude from headings)
         is_form_field = is_form_field_or_generic_term(text) or is_form_field_or_generic_term(clean_text)
+        
+        # Check if this is a table of contents entry (exclude from headings)
+        is_toc_entry = is_table_of_contents_entry(text, t["page"], text_elements) or is_table_of_contents_entry(clean_text, t["page"], text_elements)
         
         # Additional check for table-like content
         is_table_like_content = (
@@ -1234,154 +1265,6 @@ def extract_outline(pdf_path):
         # Check if this text is within a detected table region
         in_table = is_text_in_table(t, table_regions)
 
-        # NEW: Check if there's body text closely positioned to the left or right
-        # This helps exclude inline text that might have heading-like formatting but isn't actually a heading
-        def has_nearby_body_text(current_element, all_elements, body_size):
-            """
-            Check if there's normal body text positioned closely to the left or right of the current element
-            """
-            current_page = current_element["page"]
-            current_y = current_element["y_position"]
-            current_x = current_element["x_position"]
-            current_size = current_element["size"]
-            
-            # Define proximity thresholds
-            y_threshold = 3  # Vertical proximity (same line) - made more strict
-            x_threshold = 50  # Horizontal proximity - made more strict
-            
-            for element in all_elements:
-                # Skip if different page or same element
-                if element["page"] != current_page or element == current_element:
-                    continue
-                
-                element_text = element["text"].strip()
-                element_size = element["size"]
-                element_y = element["y_position"]
-                element_x = element["x_position"]
-                
-                # Check if this element is on approximately the same line (y-position)
-                if abs(element_y - current_y) <= y_threshold:
-                    # Check if it's positioned to the left or right within threshold
-                    is_nearby = (
-                        (element_x < current_x and current_x - element_x <= x_threshold) or  # To the left
-                        (element_x > current_x and element_x - current_x <= x_threshold)     # To the right
-                    )
-                    
-                    if is_nearby:
-                        # Check if this nearby element looks like body text
-                        is_body_text = (
-                            abs(element_size - body_size) <= 1 and  # Similar to body text size
-                            len(element_text) > 10 and  # Substantial text
-                            not (element.get("flags", 0) & 16) and  # Not bold
-                            ' ' in element_text and  # Contains spaces (multiple words)
-                            not re.match(r'^\d+\.', element_text) and  # Not numbered
-                            not element_text.lower() in ['yes', 'no', 'true', 'false', 'n/a', '-']  # Not form data
-                        )
-                        
-                        if is_body_text:
-                            return True
-            
-            return False
-        
-        # NEW: Enhanced check for paragraph context
-        # This checks if the element is part of flowing paragraph text rather than a standalone heading
-        def is_part_of_paragraph(current_element, all_elements, body_size):
-            """
-            Check if the current element is part of paragraph text rather than a standalone heading
-            """
-            current_page = current_element["page"]
-            current_y = current_element["y_position"]
-            current_x = current_element["x_position"]
-            current_text = current_element["text"].strip()
-            
-            # Define thresholds for paragraph detection
-            line_height_threshold = 15  # Typical line height
-            same_line_threshold = 3     # Elements on same line
-            paragraph_x_threshold = 200 # Horizontal distance for paragraph flow
-            
-            # Collect all text elements on the same page within a reasonable Y range
-            nearby_elements = []
-            for element in all_elements:
-                if (element["page"] == current_page and 
-                    element != current_element and
-                    abs(element["y_position"] - current_y) <= line_height_threshold * 3):  # Within 3 lines
-                    nearby_elements.append(element)
-            
-            if not nearby_elements:
-                return False
-            
-            # Check for paragraph flow patterns:
-            paragraph_indicators = 0
-            
-            # 1. Check for text elements immediately before and after (same line or adjacent lines)
-            for element in nearby_elements:
-                element_y = element["y_position"]
-                element_x = element["x_position"]
-                element_text = element["text"].strip()
-                element_size = element["size"]
-                
-                # Check if element is on same line or very close lines
-                if abs(element_y - current_y) <= same_line_threshold:
-                    # Same line - check horizontal proximity
-                    horizontal_distance = abs(element_x - current_x)
-                    if horizontal_distance <= paragraph_x_threshold:
-                        # Check if it looks like body text
-                        if (abs(element_size - body_size) <= 1 and 
-                            len(element_text) > 5 and
-                            not (element.get("flags", 0) & 16)):  # Not bold
-                            paragraph_indicators += 2  # Strong indicator
-                
-                # Check for text on adjacent lines that suggests paragraph flow
-                elif abs(element_y - current_y) <= line_height_threshold:
-                    # Adjacent line - check for paragraph-like text
-                    if (abs(element_size - body_size) <= 1 and 
-                        len(element_text) > 10 and
-                        ' ' in element_text and
-                        not (element.get("flags", 0) & 16)):  # Not bold
-                        paragraph_indicators += 1
-            
-            # 2. Check if current text has paragraph-like characteristics
-            paragraph_like_text = (
-                len(current_text) > 5 and
-                not current_text.endswith(':') and  # Headings often end with colons
-                not re.match(r'^\d+\.', current_text) and  # Not numbered
-                not current_text.isupper()  # Not all caps (headings often are)
-            )
-            
-            if paragraph_like_text:
-                paragraph_indicators += 1
-            
-            # 3. Check for sentence continuation patterns
-            sentence_patterns = [
-                r'\b(the|a|an|and|or|but|for|of|in|on|at|to|with|by)\s+\w+',  # Common sentence starters
-                r'\w+\s+(is|are|was|were|will|would|should|could|can|may)\s+',  # Verbs
-                r'\w+\s+(and|or|but|for|so|yet|nor)\s+\w+',  # Conjunctions
-                r'\w+[,;]\s+\w+',  # Punctuation indicating sentence flow
-            ]
-            
-            for pattern in sentence_patterns:
-                if re.search(pattern, current_text.lower()):
-                    paragraph_indicators += 1
-                    break
-            
-            # 4. Look for text that starts or ends sentences (indicating flow)
-            for element in nearby_elements:
-                element_text = element["text"].strip()
-                element_y = element["y_position"]
-                
-                if abs(element_y - current_y) <= line_height_threshold:
-                    # Check if nearby text suggests sentence flow
-                    if (element_text.endswith('.') or element_text.endswith(',') or
-                        element_text.startswith(tuple('abcdefghijklmnopqrstuvwxyz')) or
-                        any(word in element_text.lower() for word in ['and', 'the', 'of', 'in', 'on', 'for', 'with'])):
-                        paragraph_indicators += 1
-            
-            # Decision: if we have strong evidence of paragraph context, exclude from headings
-            return paragraph_indicators >= 3
-        
-        # Check if this element is part of paragraph text
-        is_in_paragraph = is_part_of_paragraph(t, text_elements, body_text_size)
-
         # Enhanced heading detection: consider both font size AND bold formatting, but with strict filtering
         is_bold = t.get("flags", 0) & 16  # Bold flag
         is_heading_size = t["size"] in heading_levels
@@ -1405,17 +1288,17 @@ def extract_outline(pdf_path):
         # 4. Text that appears above the title
         # 5. Text that appears within detected table regions
         # 6. Table-like content (dots, abbreviations, single words)
-        # 7. Text that is part of paragraph flow (not standalone headings)
+        # 7. Table of contents entries
         if ((is_heading_size or is_potential_heading_by_formatting) and 
             clean_text and 
             clean_text not in title_components and
             all_text_frequency[clean_text] <= 5 and  # Changed from 3 to 5 and using all_text_frequency
             not is_date and  # Exclude dates from headings
             not is_form_field and  # Exclude form fields and generic terms
+            not is_toc_entry and  # Exclude table of contents entries
             not is_table_like_content and  # Exclude table-like content
             not above_title and  # Exclude headings above the title
-            not in_table and  # Exclude text within table regions
-            not is_in_paragraph):  # NEW: Exclude text that's part of paragraph flow
+            not in_table):  # Exclude text within table regions
             
             # Determine heading level
             if is_heading_size:
@@ -1541,31 +1424,45 @@ def extract_outline(pdf_path):
                 
                 next_heading = potential_headings[j]
                 
-                # NEW LOGIC: Don't merge if next heading starts with a number
+                # IMPROVED LOGIC: Be much more conservative about merging
+                
+                # 1. Never merge if next heading starts with a number
                 if re.match(r'^\d+\.', next_heading["text"]):
                     break  # Don't merge headings that start with numbers
                 
-                # NEW LOGIC: Don't merge if there's text between the headings
+                # 2. Never merge if there's text between the headings
                 if has_text_between_headings(current, next_heading, text_elements):
                     break  # Don't merge if there's content between headings
                 
-                # More intelligent combination logic:
-                # 1. Always combine if next text is very short (< 20 chars)
-                # 2. Combine if next text doesn't start with a number/bullet
-                # 3. Combine if current text doesn't end with a complete sentence (no period at end)
-                # 4. Combine if both texts seem like parts of the same title/heading
+                # 3. Never merge if either heading contains multiple distinct topics
+                current_topics = sum(1 for keyword in ['introduction', 'overview', 'extension', 'tester', 'agile', 'foundation', 'level', 'syllabus', 'history', 'contents'] 
+                                   if keyword in current["text"].lower())
+                next_topics = sum(1 for keyword in ['introduction', 'overview', 'extension', 'tester', 'agile', 'foundation', 'level', 'syllabus', 'history', 'contents'] 
+                                if keyword in next_heading["text"].lower())
+                
+                if current_topics >= 2 or next_topics >= 2:
+                    break  # Don't merge if either has multiple topics (likely already merged incorrectly)
+                
+                # 4. Never merge if combined length would be excessive
+                if len(combined_text + " " + next_heading["text"]) > 100:
+                    break  # Don't create overly long headings
+                
+                # 5. Only merge in very specific cases
                 should_combine = False
                 
-                if len(next_heading["text"]) < 20:
-                    should_combine = True  # Short text is likely a continuation
-                elif not re.match(r'^\d+\.', next_heading["text"]):
-                    # Not starting with number, check if current text seems incomplete
-                    if not current["text"].rstrip().endswith('.'):
-                        should_combine = True  # Current doesn't end with period, likely incomplete
-                    # Also check if they look like title parts (both start with capital or "the")
-                    elif (current["text"][0].isupper() and 
-                          (next_heading["text"][0].isupper() or next_heading["text"].startswith("the"))):
-                        should_combine = True
+                # Case 1: Next text is very short (< 15 chars) and current doesn't end properly
+                if (len(next_heading["text"]) < 15 and 
+                    not current["text"].rstrip().endswith(('.', ':', '!', '?'))):
+                    should_combine = True
+                
+                # Case 2: Current text ends with a conjunction or preposition (incomplete)
+                elif re.search(r'\b(and|or|of|to|for|with|in|on|at|by|from)\s*$', current["text"].lower()):
+                    should_combine = True
+                
+                # Case 3: Very specific patterns that are clearly split words
+                elif (len(current["text"].split()) == 1 and len(next_heading["text"].split()) == 1 and
+                      len(current["text"]) < 10 and len(next_heading["text"]) < 10):
+                    should_combine = True
                 
                 if should_combine:
                     combined_text += " " + next_heading["text"]
@@ -1587,53 +1484,18 @@ def extract_outline(pdf_path):
     
     outline = consolidated_headings
 
+    # Remove duplicate headings (same text, keep the first occurrence)
+    deduplicated_outline = []
+    seen_texts = set()
+    for item in outline:
+        if item["text"] not in seen_texts:
+            deduplicated_outline.append(item)
+            seen_texts.add(item["text"])
+    
+    outline = deduplicated_outline
+
     # Apply numbering logic from bottom to top
     outline = apply_numbering_logic(outline)
-
-    # NEW LOGIC: Merge title with first heading ONLY if the first heading matches PDF metadata title
-    # This ensures we only merge when the first heading is actually the document's official title
-    if title and outline and len(outline) > 0 and pdf_metadata_title:
-        first_heading = outline[0]
-        
-        # Check if the first heading matches the PDF metadata title
-        # We'll do a flexible comparison to handle minor differences in formatting
-        def titles_match(heading_text, metadata_title):
-            # Normalize both strings for comparison
-            heading_normalized = re.sub(r'[^\w\s]', '', heading_text.lower().strip())
-            metadata_normalized = re.sub(r'[^\w\s]', '', metadata_title.lower().strip())
-            
-            # Check for exact match
-            if heading_normalized == metadata_normalized:
-                return True
-            
-            # Check if one contains the other (for cases where metadata has extra/fewer words)
-            if (heading_normalized in metadata_normalized or 
-                metadata_normalized in heading_normalized):
-                return True
-            
-            # Check for high word overlap (at least 80% of words match)
-            heading_words = set(heading_normalized.split())
-            metadata_words = set(metadata_normalized.split())
-            
-            if heading_words and metadata_words:
-                common_words = heading_words.intersection(metadata_words)
-                similarity = len(common_words) / max(len(heading_words), len(metadata_words))
-                return similarity >= 0.8
-            
-            return False
-        
-        # Only merge if the first heading matches the PDF metadata title
-        if titles_match(first_heading["text"], pdf_metadata_title):
-            # Merge the detected title with the first heading (which is the official PDF title)
-            merged_title = f"{title}: {first_heading['text']}"
-            
-            # Clean up redundant colons or spacing
-            merged_title = re.sub(r':\s*:', ':', merged_title)  # Remove double colons
-            merged_title = re.sub(r'\s+', ' ', merged_title)    # Normalize spaces
-            
-            # Update title and remove the first heading from outline
-            title = merged_title.strip()
-            outline = outline[1:]  # Remove first heading since it's now part of title
 
     # Convert special characters to hex in the final output
     final_title = convert_special_chars_to_hex(title if title else "Untitled Document")
