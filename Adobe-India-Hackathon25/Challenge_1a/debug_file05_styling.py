@@ -1,12 +1,41 @@
 import fitz
 import json
 from collections import Counter
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from process_pdfs import extract_outline
 
 def analyze_file05_styling():
     pdf_path = "sample_dataset/pdfs/file05.pdf"
     doc = fitz.open(pdf_path)
     
     print("=== FILE05.PDF STYLING ANALYSIS ===")
+    
+    for page_num, page in enumerate(doc):
+        print(f"\nPage {page_num}:")
+        blocks = page.get_text("dict")["blocks"]
+        for b in blocks:
+            if "lines" in b:
+                for l in b["lines"]:
+                    for s in l["spans"]:
+                        text = s["text"].strip()
+                        if text:
+                            print(f"  Text: '{text}' | Size: {s['size']:.1f} | Font: {s.get('font', 'N/A')} | Flags: {s['flags']}")
+    
+    doc.close()
+
+    # Also run the extract_outline to see what it currently detects
+    print("\n=== CURRENT OUTLINE EXTRACTION ===")
+    result = extract_outline(pdf_path)
+    print(f"Title: {result['title']}")
+    print(f"Headings: {len(result['outline'])}")
+    for heading in result['outline']:
+        print(f"  {heading['level']}: {heading['text']}")
+
+if __name__ == "__main__":
+    analyze_file05_styling()
     
     all_elements = []
     
