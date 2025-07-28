@@ -280,6 +280,65 @@ def is_form_field_or_generic_term(text):
     
     return False
 
+def apply_numbering_logic(outline):
+    """
+    Apply numbering logic from bottom to top:
+    - If there is any X.1 and X. is not present, add X. to the above heading
+    - If X. is present, add (X-1). in front of the above heading
+    - Stop at 1.
+    """
+    if not outline:
+        return outline
+    
+    # Work from bottom to top
+    for i in range(len(outline) - 1, -1, -1):
+        current_text = outline[i]["text"]
+        
+        # Check if current heading has pattern like "X.1", "X.2", etc.
+        match = re.match(r'^(\d+)\.(\d+)', current_text)
+        if match:
+            main_num = int(match.group(1))
+            sub_num = int(match.group(2))
+            
+            # Only process if this is a .1 subsection (first subsection)
+            if sub_num == 1:
+                # Look for the parent heading (the one above)
+                if i > 0:
+                    parent_text = outline[i-1]["text"]
+                    
+                    # Check if parent already has the main number
+                    parent_match = re.match(r'^(\d+)\.\s', parent_text)
+                    if parent_match:
+                        parent_num = int(parent_match.group(1))
+                        # If parent has a number, add (parent_num - 1) to the heading above it
+                        if i > 1 and parent_num > 1:
+                            grandparent_text = outline[i-2]["text"]
+                            # Only add numbering if it doesn't already have it
+                            if not re.match(r'^\d+\.', grandparent_text):
+                                outline[i-2]["text"] = f"{parent_num - 1}. {grandparent_text}"
+                    else:
+                        # Parent doesn't have the main number, add it
+                        outline[i-1]["text"] = f"{main_num}. {parent_text}"
+    
+    # Second pass: handle cases where we have numbered sections (like "2.") 
+    # and need to add numbers to headings above them
+    for i in range(len(outline) - 1, -1, -1):
+        current_text = outline[i]["text"]
+        
+        # Check if current heading has pattern like "X. Title" (main section)
+        match = re.match(r'^(\d+)\.\s', current_text)
+        if match:
+            main_num = int(match.group(1))
+            
+            # If this is section 2 or higher, add numbering to the heading above it
+            if main_num >= 2 and i > 0:
+                parent_text = outline[i-1]["text"]
+                # Only add numbering if it doesn't already have it and we haven't reached "1."
+                if not re.match(r'^\d+\.', parent_text) and main_num > 1:
+                    outline[i-1]["text"] = f"{main_num - 1}. {parent_text}"
+    
+    return outline
+
 def extract_outline(pdf_path):
     doc = fitz.open(pdf_path)
     text_elements = []
@@ -667,6 +726,9 @@ def extract_outline(pdf_path):
         i = j if j > i + 1 else i + 1
     
     outline = consolidated_headings
+
+    # Apply numbering logic from bottom to top
+    outline = apply_numbering_logic(outline)
 
     # Convert special characters to hex in the final output
     final_title = convert_special_chars_to_hex(title if title else "Untitled Document")
