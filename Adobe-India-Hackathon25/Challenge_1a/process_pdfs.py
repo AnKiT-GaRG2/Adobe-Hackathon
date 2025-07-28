@@ -339,6 +339,584 @@ def apply_numbering_logic(outline):
     
     return outline
 
+def detect_table_regions(text_elements):
+    """
+    Advanced table detection that identifies table regions using multiple heuristics:
+    1. Regular column alignment patterns
+    2. Repeating structural patterns
+    3. High density of short text elements
+    4. Consistent spacing patterns
+    5. Tabular data characteristics (numbers, short phrases)
+    """
+    table_regions = []
+    
+    if not text_elements:
+        return table_regions
+    
+    # Group text elements by page
+    pages = {}
+    for element in text_elements:
+        page_num = element["page"]
+        if page_num not in pages:
+            pages[page_num] = []
+        pages[page_num].append(element)
+    
+    for page_num, page_elements in pages.items():
+        # Sort elements by Y position (top to bottom)
+        page_elements.sort(key=lambda x: x["y_position"])
+        
+        # Detect table regions on this page
+        page_table_regions = detect_tables_on_page(page_elements, page_num)
+        table_regions.extend(page_table_regions)
+    
+    return table_regions
+
+def detect_tables_on_page(elements, page_num):
+    """
+    Detect table regions on a single page using advanced heuristics
+    """
+    table_regions = []
+    
+    if len(elements) < 6:  # Too few elements to form a meaningful table
+        return table_regions
+    
+    # Group elements into potential rows based on Y-coordinate proximity
+    rows = group_elements_into_rows(elements)
+    
+    # Analyze each group of consecutive rows for table characteristics
+    i = 0
+    while i < len(rows):
+        table_start = i
+        table_end = i
+        
+        # Look for consecutive rows that show table characteristics
+        consecutive_table_rows = 0
+        max_consecutive = 0
+        
+        for j in range(i, min(i + 20, len(rows))):  # Look ahead up to 20 rows
+            if is_table_row(rows[j], rows[max(0, j-2):j+3]):  # Consider context of ±2 rows
+                consecutive_table_rows += 1
+                max_consecutive = max(max_consecutive, consecutive_table_rows)
+                table_end = j
+            else:
+                consecutive_table_rows = 0
+        
+        # If we found enough consecutive table-like rows, mark it as a table region
+        if max_consecutive >= 4:  # Increased from 3 to 4 - require more evidence for table detection
+            # Additional validation: ensure this looks like a real table
+            table_rows = rows[table_start:table_end+1]
+            if validate_table_region(table_rows):
+                table_regions.append({
+                    "page": page_num,
+                    "start_row": table_start,
+                    "end_row": table_end,
+                    "y_start": rows[table_start][0]["y_position"] if rows[table_start] else 0,
+                    "y_end": rows[table_end][-1]["y_position"] if rows[table_end] else 0,
+                    "elements": [elem for row in rows[table_start:table_end+1] for elem in row]
+                })
+            i = table_end + 1
+        else:
+            i += 1
+    
+    return table_regions
+
+def validate_table_region(table_rows):
+    """
+    Additional validation to ensure a detected region is actually a table
+    """
+    if not table_rows or len(table_rows) < 3:
+        return False
+    
+    # Check for consistent column structure
+    column_counts = [len(row) for row in table_rows]
+    avg_columns = sum(column_counts) / len(column_counts)
+    
+    # Tables should have relatively consistent column counts
+    consistent_columns = sum(1 for count in column_counts if abs(count - avg_columns) <= 1)
+    if consistent_columns / len(column_counts) < 0.7:
+        return False
+    
+    # Check for data-like content (not just text)
+    data_elements = 0
+    total_elements = 0
+    
+    for row in table_rows:
+        for elem in row:
+            total_elements += 1
+            text = elem["text"].strip()
+            
+            # Look for typical table content
+            if (text.isdigit() or
+                re.match(r'^\d+\.\d+$', text) or
+                text in ['Yes', 'No', 'True', 'False', 'N/A', '-', ''] or
+                len(text) <= 10):
+                data_elements += 1
+    
+    # At least 40% of elements should look like table data
+    if total_elements > 0 and data_elements / total_elements < 0.4:
+        return False
+    
+    return True
+
+def group_elements_into_rows(elements, y_threshold=3):
+    """
+    Group text elements into rows based on Y-coordinate proximity
+    """
+    if not elements:
+        return []
+    
+    rows = []
+    current_row = [elements[0]]
+    current_y = elements[0]["y_position"]
+    
+    for element in elements[1:]:
+        # If Y-position is close enough, add to current row
+        if abs(element["y_position"] - current_y) <= y_threshold:
+            current_row.append(element)
+        else:
+            # Start new row
+            if current_row:
+                # Sort row elements by X position (left to right)
+                current_row.sort(key=lambda x: x["x_position"])
+                rows.append(current_row)
+            current_row = [element]
+            current_y = element["y_position"]
+    
+    # Add the last row
+    if current_row:
+        current_row.sort(key=lambda x: x["x_position"])
+        rows.append(current_row)
+    
+    return rows
+
+def is_table_row(row, context_rows):
+    """
+    Determine if a row of text elements represents a table row
+    using multiple sophisticated heuristics with improved accuracy
+    """
+    if not row or len(row) < 2:
+        return False
+    
+    # Enhanced exclusion checks for obvious non-table content
+    if is_obviously_not_table_row(row):
+        return False
+    
+    # Heuristic 1: Column alignment detection
+    column_alignment_score = calculate_column_alignment_score(row, context_rows)
+    
+    # Heuristic 2: Text characteristics (short, structured text)
+    text_characteristics_score = calculate_text_characteristics_score(row)
+    
+    # Heuristic 3: Spacing regularity
+    spacing_regularity_score = calculate_spacing_regularity_score(row)
+    
+    # Heuristic 4: Data pattern recognition (numbers, dates, structured data)
+    data_pattern_score = calculate_data_pattern_score(row)
+    
+    # Heuristic 5: Font consistency (tables often use consistent fonts)
+    font_consistency_score = calculate_font_consistency_score(row)
+    
+    # Combine scores with weights
+    total_score = (
+        column_alignment_score * 0.3 +
+        text_characteristics_score * 0.25 +
+        spacing_regularity_score * 0.2 +
+        data_pattern_score * 0.15 +
+        font_consistency_score * 0.1
+    )
+    
+    # Higher threshold for considering a row as part of a table
+    return total_score > 0.7
+
+def is_obviously_not_table_row(row):
+    """
+    Check if this row is obviously not part of a table
+    """
+    if not row:
+        return True
+        
+    # If row has only one element, it's likely not a table row
+    if len(row) == 1:
+        single_text = row[0]["text"].strip()
+        
+        # Check if it's a heading-like text
+        if (len(single_text) > 30 or  # Long text is usually not table content
+            re.match(r'^\d+(\.\d+)*\.?\s+[A-Z]', single_text) or  # Section numbering
+            single_text.count(' ') > 5):  # Many words
+            return True
+    
+    # Check if all elements in the row are very long text (likely paragraphs, not table)
+    long_text_count = 0
+    for elem in row:
+        text = elem["text"].strip()
+        if len(text) > 50 or text.count(' ') > 8:
+            long_text_count += 1
+    
+    # If most elements are long text, it's likely not a table
+    if long_text_count / len(row) > 0.6:
+        return True
+    
+    # Check for obvious heading patterns
+    for elem in row:
+        text = elem["text"].strip()
+        # Common heading patterns
+        if (text.lower().startswith(('chapter', 'section', 'part', 'appendix', 'introduction', 'conclusion', 'summary', 'overview')) or
+            re.match(r'^\d+\.\s+[A-Z][a-z]', text)):  # "1. Introduction" pattern
+            return True
+    
+    return False
+
+def calculate_column_alignment_score(row, context_rows):
+    """
+    Calculate how well this row aligns with columns in context rows
+    """
+    if not context_rows:
+        return 0.0
+    
+    # Get X positions of elements in this row
+    row_x_positions = [elem["x_position"] for elem in row]
+    
+    # Get X positions from context rows
+    context_x_positions = []
+    for context_row in context_rows:
+        if context_row != row:  # Exclude the current row
+            context_x_positions.extend([elem["x_position"] for elem in context_row])
+    
+    if not context_x_positions:
+        return 0.0
+    
+    # Count how many elements align with context positions (within tolerance)
+    alignment_tolerance = 5  # pixels
+    aligned_count = 0
+    
+    for x_pos in row_x_positions:
+        for context_x in context_x_positions:
+            if abs(x_pos - context_x) <= alignment_tolerance:
+                aligned_count += 1
+                break
+    
+    return aligned_count / len(row_x_positions) if row_x_positions else 0.0
+
+def calculate_text_characteristics_score(row):
+    """
+    Calculate score based on text characteristics typical of table cells
+    """
+    if not row:
+        return 0.0
+    
+    score = 0.0
+    total_elements = len(row)
+    
+    for elem in row:
+        text = elem["text"].strip()
+        
+        # Short text segments are common in tables
+        if 1 <= len(text) <= 20:
+            score += 0.3
+        
+        # Single words or short phrases
+        if len(text.split()) <= 3:
+            score += 0.2
+        
+        # Numbers, dates, or structured data
+        if re.search(r'\d', text):
+            score += 0.3
+        
+        # Common table content patterns
+        if re.match(r'^[A-Z]{1,5}$', text):  # Abbreviations
+            score += 0.2
+        
+        # Currency, percentages, measurements
+        if re.search(r'[\$€£%]|\b\d+\.\d+\b', text):
+            score += 0.4
+    
+    return min(score / total_elements, 1.0)
+
+def calculate_spacing_regularity_score(row):
+    """
+    Calculate score based on regular spacing between elements
+    """
+    if len(row) < 3:
+        return 0.0
+    
+    # Calculate gaps between consecutive elements
+    gaps = []
+    for i in range(len(row) - 1):
+        gap = row[i + 1]["x_position"] - (row[i]["x_position"] + 50)  # Approximate text width
+        gaps.append(gap)
+    
+    if not gaps:
+        return 0.0
+    
+    # Calculate coefficient of variation (std/mean) - lower is more regular
+    import statistics
+    try:
+        mean_gap = statistics.mean(gaps)
+        if mean_gap == 0:
+            return 1.0 if all(g == 0 for g in gaps) else 0.0
+        
+        std_gap = statistics.stdev(gaps) if len(gaps) > 1 else 0
+        cv = std_gap / abs(mean_gap)
+        
+        # Convert to score (lower CV = higher score)
+        return max(0.0, 1.0 - cv)
+    except:
+        return 0.0
+
+def calculate_data_pattern_score(row):
+    """
+    Calculate score based on structured data patterns common in tables
+    """
+    if not row:
+        return 0.0
+    
+    score = 0.0
+    total_elements = len(row)
+    
+    for elem in row:
+        text = elem["text"].strip()
+        
+        # Numbers (including decimals)
+        if re.match(r'^\d+(\.\d+)?$', text):
+            score += 0.5
+        
+        # Dates
+        if re.search(r'\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}', text):
+            score += 0.4
+        
+        # Currency
+        if re.search(r'[\$€£]\s*\d+', text):
+            score += 0.4
+        
+        # Percentages
+        if re.search(r'\d+%', text):
+            score += 0.4
+        
+        # Yes/No, True/False type values
+        if text.lower() in ['yes', 'no', 'true', 'false', 'y', 'n', 'x', '✓', '✗']:
+            score += 0.3
+        
+        # Short codes or IDs
+        if re.match(r'^[A-Z0-9\-_]{2,10}$', text):
+            score += 0.2
+    
+    return min(score / total_elements, 1.0)
+
+def calculate_font_consistency_score(row):
+    """
+    Calculate score based on font consistency within the row
+    """
+    if not row:
+        return 0.0
+    
+    # Check if all elements have the same font size
+    sizes = [elem["size"] for elem in row]
+    if len(set(sizes)) == 1:
+        return 1.0
+    
+    # Check if sizes are very close
+    import statistics
+    if len(sizes) > 1:
+        try:
+            mean_size = statistics.mean(sizes)
+            if mean_size > 0:
+                cv = statistics.stdev(sizes) / mean_size
+                return max(0.0, 1.0 - cv * 2)  # Penalize size variation
+        except:
+            pass
+    
+    return 0.0
+
+def is_text_in_table(element, table_regions):
+    """
+    Advanced check if a text element is within any detected table region.
+    Uses multiple criteria to avoid false positives with headings.
+    """
+    for table in table_regions:
+        if element["page"] != table["page"]:
+            continue
+            
+        # Basic Y-coordinate check first
+        if not (table["y_start"] <= element["y_position"] <= table["y_end"]):
+            continue
+            
+        # Advanced checks to avoid classifying headings as table content:
+        
+        # 1. Check if this element looks like a heading based on text characteristics
+        text = element.get("text", "").strip()
+        if is_likely_heading_text(text):
+            # Additional validation: check if element is truly embedded within table structure
+            if not is_truly_embedded_in_table(element, table):
+                continue
+        
+        # 2. Check X-position alignment with table columns
+        # Headings often span multiple columns or are outside column boundaries
+        if is_spanning_multiple_columns(element, table):
+            continue
+            
+        # 3. Check font characteristics relative to table content
+        if has_heading_font_characteristics(element, table):
+            continue
+            
+        # 4. Check isolation - headings are often isolated from dense table content
+        if is_isolated_from_table_content(element, table):
+            continue
+            
+        # If all checks pass, the element is likely within a table
+        return True
+    
+    return False
+
+def is_likely_heading_text(text):
+    """
+    Check if text has characteristics typical of headings
+    """
+    if not text:
+        return False
+        
+    # Remove leading/trailing whitespace and normalize
+    clean_text = text.strip()
+    
+    # Headings often have:
+    # 1. Proper capitalization patterns
+    # 2. Meaningful length (not too short, not too long)
+    # 3. Descriptive words rather than data
+    # 4. Section numbering patterns
+    
+    # Check for section numbering
+    if re.match(r'^\d+(\.\d+)*\.?\s', clean_text):
+        return True
+        
+    # Check for title case or sentence case
+    words = clean_text.split()
+    if len(words) >= 2:
+        # Check if it's title case (most words capitalized)
+        capitalized_words = sum(1 for word in words if word[0].isupper() and len(word) > 2)
+        if capitalized_words / len(words) > 0.5:
+            return True
+            
+    # Check for common heading keywords
+    heading_keywords = [
+        'introduction', 'overview', 'summary', 'conclusion', 'background',
+        'methodology', 'results', 'discussion', 'references', 'appendix',
+        'chapter', 'section', 'part', 'acknowledgements', 'abstract',
+        'contents', 'objectives', 'requirements', 'specifications',
+        'implementation', 'analysis', 'evaluation', 'recommendations'
+    ]
+    
+    for keyword in heading_keywords:
+        if keyword in clean_text.lower():
+            return True
+            
+    return False
+
+def is_truly_embedded_in_table(element, table):
+    """
+    Check if element is truly embedded within table structure
+    """
+    # Get surrounding elements in the table
+    table_elements = table.get("elements", [])
+    
+    # Check if there are table-like elements (numbers, short text) very close to this element
+    close_elements = []
+    element_y = element["y_position"]
+    element_x = element["x_position"]
+    
+    for table_elem in table_elements:
+        if (abs(table_elem["y_position"] - element_y) <= 5 and  # Same row
+            abs(table_elem["x_position"] - element_x) > 20):    # Different column
+            close_elements.append(table_elem)
+    
+    # If there are many close elements with table-like characteristics, it's embedded
+    if len(close_elements) >= 2:
+        table_like_count = 0
+        for elem in close_elements:
+            elem_text = elem.get("text", "").strip()
+            # Check for typical table content (numbers, short text, etc.)
+            if (elem_text.isdigit() or 
+                len(elem_text) <= 15 or 
+                re.match(r'^\d+(\.\d+)?$', elem_text) or
+                elem_text.lower() in ['yes', 'no', 'true', 'false', 'n/a', '-']):
+                table_like_count += 1
+        
+        return table_like_count >= len(close_elements) * 0.6
+    
+    return False
+
+def is_spanning_multiple_columns(element, table):
+    """
+    Check if element spans multiple columns (typical for headings)
+    """
+    table_elements = table.get("elements", [])
+    
+    # Find typical column positions in the table
+    x_positions = [elem["x_position"] for elem in table_elements]
+    if len(x_positions) < 4:  # Need enough elements to determine columns
+        return False
+    
+    # Find common X positions (columns)
+    x_positions.sort()
+    columns = []
+    current_col = x_positions[0]
+    columns.append(current_col)
+    
+    for x in x_positions[1:]:
+        if x - current_col > 30:  # Significant gap indicates new column
+            columns.append(x)
+            current_col = x
+    
+    if len(columns) < 2:  # Not enough columns to determine spanning
+        return False
+    
+    # Check if element's text width would span multiple columns
+    element_text = element.get("text", "")
+    estimated_width = len(element_text) * 6  # Rough estimate of text width
+    
+    # Check if element starts before first column and extends beyond second column
+    element_x = element["x_position"]
+    if (element_x <= columns[0] + 10 and  # Starts near or before first column
+        element_x + estimated_width >= columns[1] - 10):  # Extends to second column
+        return True
+    
+    return False
+
+def has_heading_font_characteristics(element, table):
+    """
+    Check if element has font characteristics typical of headings vs table content
+    """
+    table_elements = table.get("elements", [])
+    
+    # Get font sizes in the table
+    table_font_sizes = [elem.get("size", 12) for elem in table_elements if "size" in elem]
+    
+    if not table_font_sizes:
+        return False
+    
+    avg_table_font_size = sum(table_font_sizes) / len(table_font_sizes)
+    element_font_size = element.get("size", 12)
+    
+    # If element font is significantly larger than average table font, it's likely a heading
+    if element_font_size > avg_table_font_size * 1.2:
+        return True
+    
+    return False
+
+def is_isolated_from_table_content(element, table):
+    """
+    Check if element is isolated from dense table content
+    """
+    table_elements = table.get("elements", [])
+    element_y = element["y_position"]
+    
+    # Count elements very close to this element (same row area)
+    close_elements = 0
+    for table_elem in table_elements:
+        if abs(table_elem["y_position"] - element_y) <= 3:
+            close_elements += 1
+    
+    # If there are very few elements on the same row, it might be an isolated heading
+    return close_elements <= 2
+
 def extract_outline(pdf_path):
     doc = fitz.open(pdf_path)
     text_elements = []
@@ -373,6 +951,16 @@ def extract_outline(pdf_path):
                             "relative_x": relative_x
                         })
 
+    # --- DETECT TABLE REGIONS ---
+    # Perform advanced table detection before processing headings
+    table_regions = detect_table_regions(text_elements)
+    
+    # Optional: Log table detection results for debugging
+    if table_regions:
+        print(f"  Detected {len(table_regions)} table regions in {pdf_path}")
+        for i, table in enumerate(table_regions):
+            print(f"    Table {i+1}: Page {table['page']}, Y-range: {table['y_start']:.1f}-{table['y_end']:.1f}, Elements: {len(table['elements'])}")
+    
     # --- 2. Determine title & heading levels ---
     sizes = [t["size"] for t in text_elements if len(t["text"]) > 3]
     most_common = Counter(sizes).most_common()
@@ -555,12 +1143,16 @@ def extract_outline(pdf_path):
         # Using 70% as threshold: text starting beyond 70% of page width is considered right-side
         on_right_side = t["relative_x"] > 0.7  # Configurable threshold for right-side detection
 
+        # Check if this text is within a detected table region
+        in_table = is_text_in_table(t, table_regions)
+
         # Collect potential heading elements, but exclude:
         # 1. Text that appears too frequently (more than 5 times anywhere in the PDF)
         # 2. Any text containing dates in any format (comprehensive date detection)
         # 3. Form fields and generic single-word terms (name, date, address, etc.)
         # 4. Text that appears above the title
         # 5. Text that appears on the right side of the page
+        # 6. Text that appears within detected table regions
         if (t["size"] in heading_levels and 
             clean_text and 
             clean_text not in title_components and
@@ -568,7 +1160,8 @@ def extract_outline(pdf_path):
             not is_date and  # Exclude dates from headings
             not is_form_field and  # Exclude form fields and generic terms
             not above_title and  # Exclude headings above the title
-            not on_right_side):  # Exclude headings on the right side of the page
+            not on_right_side and  # Exclude headings on the right side of the page
+            not in_table):  # Exclude text within table regions
             potential_headings.append({
                 "level": heading_levels[t["size"]],
                 "text": text.strip() if has_numbering else clean_text,  # Preserve original text for numbered headings
