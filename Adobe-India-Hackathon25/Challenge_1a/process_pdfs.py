@@ -185,6 +185,51 @@ def has_long_numbers(text):
     
     return False
 
+def contains_url(text):
+    """
+    Check if text contains URLs or web addresses
+    Returns True if the text contains any URL patterns
+    """
+    if not text:
+        return False
+    
+    # Define URL patterns
+    url_patterns = [
+        # Standard HTTP/HTTPS URLs
+        r'https?://[^\s]+',
+        
+        # FTP URLs
+        r'ftp://[^\s]+',
+        
+        # URLs without protocol
+        r'www\.[^\s]+',
+        
+        # Domain patterns (like example.com)
+        r'\b[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})\b',
+        
+        # Email addresses (often found with URLs)
+        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+        
+        # IP addresses
+        r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
+        
+        # File extensions commonly associated with web content
+        r'\b[^\s]+\.(html?|php|asp|jsp|css|js)\b',
+        
+        # Common URL-like patterns
+        r'\b[^\s]*://[^\s]*',
+        
+        # Domain-like patterns with common TLDs
+        r'\b[^\s]+\.(com|org|net|edu|gov|mil|int|co|uk|de|fr|jp|cn|au|ca|in|br|mx|ru|za|it|es|nl|se|no|dk|fi|be|at|ch|pl|cz|hu|gr|pt|ie|il|kr|tw|hk|sg|th|my|id|ph|vn|pk|bd|lk|np|mm|kh|la|mn|uz|kz|kg|tj|tm|af|ir|iq|sa|ae|om|ye|jo|lb|sy|tr|cy|ge|az|am|by|ua|md|ro|bg|rs|hr|si|sk|lt|lv|ee|is|fo|gl|ad|sm|va|mc|li|lu|mt|al|mk|ba|me|xk|gg|je|im|gi|mq|gp|re|yt|nc|pf|wf|pm|bl|mf|sx|cw|aw|tc|ky|bm|vg|ai|ms|ag|bb|dm|gd|kn|lc|vc|tt|jm|ht|do|cu|bs|pr|vi|as|gu|mp|pw|fm|mh|ki|nr|tv|to|ws|vu|sb|fj|pg|nc|nf|ck|nu|tk|pn|gs|io|tf|bv|sj|um|aq)\b',
+    ]
+    
+    # Check if any URL pattern matches the text
+    for pattern in url_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    
+    return False
+
 def group_text_by_lines(text_elements):
     """
     Group text elements that appear on the same line
@@ -271,6 +316,10 @@ def is_valid_heading_line(line_elements, heading_levels, all_text_frequency, tit
     
     # Check if the complete line has long numbers
     if has_long_numbers(complete_line_text):
+        return False
+    
+    # Check if the complete line contains URLs
+    if contains_url(complete_line_text) or contains_url(clean_line_text):
         return False
     
     # Check word count for the complete line

@@ -4,12 +4,78 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from process_pdfs import group_text_by_lines, is_valid_heading_line
 
-# Test the line-based grouping logic
-def test_line_grouping():
-    print("Testing line-based text grouping and validation:")
+# Test the line-based grouping and validation logic
+def test_line_based_logic():
+    print("Testing Line-Based Heading Detection Logic")
     print("=" * 60)
     
-    # Mock text elements representing different scenarios
+    # Simulate text elements from a PDF (different scenarios)
+    test_scenarios = [
+        {
+            "name": "Same line - All heading size (should be valid)",
+            "elements": [
+                {"text": "Introduction", "size": 16, "page": 1, "y_position": 100, "x_position": 50},
+                {"text": "to", "size": 16, "page": 1, "y_position": 100, "x_position": 150},
+                {"text": "Python", "size": 16, "page": 1, "y_position": 100, "x_position": 180}
+            ]
+        },
+        {
+            "name": "Same line - Mixed sizes (should check proportion)",
+            "elements": [
+                {"text": "Chapter", "size": 16, "page": 1, "y_position": 200, "x_position": 50},
+                {"text": "Overview", "size": 12, "page": 1, "y_position": 200, "x_position": 120}
+            ]
+        },
+        {
+            "name": "Same line - One heading word with body word",
+            "elements": [
+                {"text": "Programming", "size": 16, "page": 1, "y_position": 300, "x_position": 50},
+                {"text": "fundamentals", "size": 10, "page": 1, "y_position": 300, "x_position": 150}
+            ]
+        },
+        {
+            "name": "Different lines - Should be grouped separately",
+            "elements": [
+                {"text": "Title", "size": 16, "page": 1, "y_position": 400, "x_position": 50},
+                {"text": "Subtitle", "size": 14, "page": 1, "y_position": 420, "x_position": 50}
+            ]
+        }
+    ]
+    
+    # Mock heading levels and other required parameters
+    heading_levels = {16: "H1", 14: "H2", 12: "H3"}
+    all_text_frequency = {}
+    title_components = []
+    
+    for scenario in test_scenarios:
+        print(f"\n{scenario['name']}:")
+        print("-" * 40)
+        
+        # Group by lines
+        line_groups = group_text_by_lines(scenario['elements'])
+        
+        print(f"Number of line groups: {len(line_groups)}")
+        
+        for i, line_group in enumerate(line_groups):
+            # Show what's in each line group
+            line_text = " ".join([elem["text"] for elem in line_group])
+            line_sizes = [elem["size"] for elem in line_group]
+            
+            print(f"Line {i+1}: '{line_text}' (sizes: {line_sizes})")
+            
+            # Test if this line is valid as a heading
+            is_valid = is_valid_heading_line(line_group, heading_levels, all_text_frequency, title_components)
+            print(f"Valid heading: {is_valid}")
+            
+            if is_valid:
+                # Show what the combined heading would look like
+                combined_text = " ".join([elem["text"].strip() for elem in line_group if elem["text"].strip()])
+                heading_size = max([elem["size"] for elem in line_group if elem["size"] in heading_levels])
+                level = heading_levels[heading_size]
+                print(f"Would create: {level} - '{combined_text}'")
+
+if __name__ == "__main__":
+    test_line_based_logic()
     test_elements = [
         # Scenario 1: Same line with all heading-sized text (should be valid)
         {"text": "Introduction", "size": 14, "page": 0, "y_position": 100, "x_position": 50},
@@ -58,4 +124,4 @@ def test_line_grouping():
         print()
 
 if __name__ == "__main__":
-    test_line_grouping()
+    test_line_based_logic()
