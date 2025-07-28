@@ -949,6 +949,9 @@ def is_isolated_from_table_content(element, table):
 def extract_outline(pdf_path):
     doc = fitz.open(pdf_path)
     text_elements = []
+    
+    # Get PDF metadata title for comparison
+    pdf_metadata_title = doc.metadata.get('title', '').strip() if doc.metadata else ''
 
     # --- 1. Collect text with font sizes and position information ---
     for page_num, page in enumerate(doc, start=1):
@@ -1421,6 +1424,51 @@ def extract_outline(pdf_path):
 
     # Apply numbering logic from bottom to top
     outline = apply_numbering_logic(outline)
+
+    # NEW LOGIC: Merge title with first heading ONLY if the first heading matches PDF metadata title
+    # This ensures we only merge when the first heading is actually the document's official title
+    if title and outline and len(outline) > 0 and pdf_metadata_title:
+        first_heading = outline[0]
+        
+        # Check if the first heading matches the PDF metadata title
+        # We'll do a flexible comparison to handle minor differences in formatting
+        def titles_match(heading_text, metadata_title):
+            # Normalize both strings for comparison
+            heading_normalized = re.sub(r'[^\w\s]', '', heading_text.lower().strip())
+            metadata_normalized = re.sub(r'[^\w\s]', '', metadata_title.lower().strip())
+            
+            # Check for exact match
+            if heading_normalized == metadata_normalized:
+                return True
+            
+            # Check if one contains the other (for cases where metadata has extra/fewer words)
+            if (heading_normalized in metadata_normalized or 
+                metadata_normalized in heading_normalized):
+                return True
+            
+            # Check for high word overlap (at least 80% of words match)
+            heading_words = set(heading_normalized.split())
+            metadata_words = set(metadata_normalized.split())
+            
+            if heading_words and metadata_words:
+                common_words = heading_words.intersection(metadata_words)
+                similarity = len(common_words) / max(len(heading_words), len(metadata_words))
+                return similarity >= 0.8
+            
+            return False
+        
+        # Only merge if the first heading matches the PDF metadata title
+        if titles_match(first_heading["text"], pdf_metadata_title):
+            # Merge the detected title with the first heading (which is the official PDF title)
+            merged_title = f"{title}: {first_heading['text']}"
+            
+            # Clean up redundant colons or spacing
+            merged_title = re.sub(r':\s*:', ':', merged_title)  # Remove double colons
+            merged_title = re.sub(r'\s+', ' ', merged_title)    # Normalize spaces
+            
+            # Update title and remove the first heading from outline
+            title = merged_title.strip()
+            outline = outline[1:]  # Remove first heading since it's now part of title
 
     # Convert special characters to hex in the final output
     final_title = convert_special_chars_to_hex(title if title else "Untitled Document")
