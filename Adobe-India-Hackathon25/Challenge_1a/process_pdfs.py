@@ -1189,6 +1189,21 @@ def extract_outline(pdf_path):
         # Check if this text contains any date format (exclude dates from headings)
         # Use comprehensive date detection that covers all common date formats
         is_date = contains_date(text) or contains_date(clean_text)
+        
+        # Additional check for temporal fragments that might not be caught by contains_date
+        temporal_fragments = [
+            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s*\d{1,2}\b',
+            r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s*\d{1,2}\b',
+            r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+            r'\b(morning|afternoon|evening|night|noon|midnight)\b',
+            r'\b\d{1,2}:\d{2}\s*(am|pm|a\.m\.|p\.m\.)\b',
+            r'\b(today|tomorrow|yesterday)\b',
+            r'^\d{1,2}$',  # Just a number (likely day)
+            r'^\d{1,2}:\d{2}$',  # Just time
+        ]
+        
+        is_temporal_fragment = any(re.search(pattern, clean_text.lower()) for pattern in temporal_fragments)
+        is_date = is_date or is_temporal_fragment
 
         # Check if this is a form field or generic term (exclude from headings)
         is_form_field = is_form_field_or_generic_term(text) or is_form_field_or_generic_term(clean_text)
@@ -1219,6 +1234,154 @@ def extract_outline(pdf_path):
         # Check if this text is within a detected table region
         in_table = is_text_in_table(t, table_regions)
 
+        # NEW: Check if there's body text closely positioned to the left or right
+        # This helps exclude inline text that might have heading-like formatting but isn't actually a heading
+        def has_nearby_body_text(current_element, all_elements, body_size):
+            """
+            Check if there's normal body text positioned closely to the left or right of the current element
+            """
+            current_page = current_element["page"]
+            current_y = current_element["y_position"]
+            current_x = current_element["x_position"]
+            current_size = current_element["size"]
+            
+            # Define proximity thresholds
+            y_threshold = 3  # Vertical proximity (same line) - made more strict
+            x_threshold = 50  # Horizontal proximity - made more strict
+            
+            for element in all_elements:
+                # Skip if different page or same element
+                if element["page"] != current_page or element == current_element:
+                    continue
+                
+                element_text = element["text"].strip()
+                element_size = element["size"]
+                element_y = element["y_position"]
+                element_x = element["x_position"]
+                
+                # Check if this element is on approximately the same line (y-position)
+                if abs(element_y - current_y) <= y_threshold:
+                    # Check if it's positioned to the left or right within threshold
+                    is_nearby = (
+                        (element_x < current_x and current_x - element_x <= x_threshold) or  # To the left
+                        (element_x > current_x and element_x - current_x <= x_threshold)     # To the right
+                    )
+                    
+                    if is_nearby:
+                        # Check if this nearby element looks like body text
+                        is_body_text = (
+                            abs(element_size - body_size) <= 1 and  # Similar to body text size
+                            len(element_text) > 10 and  # Substantial text
+                            not (element.get("flags", 0) & 16) and  # Not bold
+                            ' ' in element_text and  # Contains spaces (multiple words)
+                            not re.match(r'^\d+\.', element_text) and  # Not numbered
+                            not element_text.lower() in ['yes', 'no', 'true', 'false', 'n/a', '-']  # Not form data
+                        )
+                        
+                        if is_body_text:
+                            return True
+            
+            return False
+        
+        # NEW: Enhanced check for paragraph context
+        # This checks if the element is part of flowing paragraph text rather than a standalone heading
+        def is_part_of_paragraph(current_element, all_elements, body_size):
+            """
+            Check if the current element is part of paragraph text rather than a standalone heading
+            """
+            current_page = current_element["page"]
+            current_y = current_element["y_position"]
+            current_x = current_element["x_position"]
+            current_text = current_element["text"].strip()
+            
+            # Define thresholds for paragraph detection
+            line_height_threshold = 15  # Typical line height
+            same_line_threshold = 3     # Elements on same line
+            paragraph_x_threshold = 200 # Horizontal distance for paragraph flow
+            
+            # Collect all text elements on the same page within a reasonable Y range
+            nearby_elements = []
+            for element in all_elements:
+                if (element["page"] == current_page and 
+                    element != current_element and
+                    abs(element["y_position"] - current_y) <= line_height_threshold * 3):  # Within 3 lines
+                    nearby_elements.append(element)
+            
+            if not nearby_elements:
+                return False
+            
+            # Check for paragraph flow patterns:
+            paragraph_indicators = 0
+            
+            # 1. Check for text elements immediately before and after (same line or adjacent lines)
+            for element in nearby_elements:
+                element_y = element["y_position"]
+                element_x = element["x_position"]
+                element_text = element["text"].strip()
+                element_size = element["size"]
+                
+                # Check if element is on same line or very close lines
+                if abs(element_y - current_y) <= same_line_threshold:
+                    # Same line - check horizontal proximity
+                    horizontal_distance = abs(element_x - current_x)
+                    if horizontal_distance <= paragraph_x_threshold:
+                        # Check if it looks like body text
+                        if (abs(element_size - body_size) <= 1 and 
+                            len(element_text) > 5 and
+                            not (element.get("flags", 0) & 16)):  # Not bold
+                            paragraph_indicators += 2  # Strong indicator
+                
+                # Check for text on adjacent lines that suggests paragraph flow
+                elif abs(element_y - current_y) <= line_height_threshold:
+                    # Adjacent line - check for paragraph-like text
+                    if (abs(element_size - body_size) <= 1 and 
+                        len(element_text) > 10 and
+                        ' ' in element_text and
+                        not (element.get("flags", 0) & 16)):  # Not bold
+                        paragraph_indicators += 1
+            
+            # 2. Check if current text has paragraph-like characteristics
+            paragraph_like_text = (
+                len(current_text) > 5 and
+                not current_text.endswith(':') and  # Headings often end with colons
+                not re.match(r'^\d+\.', current_text) and  # Not numbered
+                not current_text.isupper()  # Not all caps (headings often are)
+            )
+            
+            if paragraph_like_text:
+                paragraph_indicators += 1
+            
+            # 3. Check for sentence continuation patterns
+            sentence_patterns = [
+                r'\b(the|a|an|and|or|but|for|of|in|on|at|to|with|by)\s+\w+',  # Common sentence starters
+                r'\w+\s+(is|are|was|were|will|would|should|could|can|may)\s+',  # Verbs
+                r'\w+\s+(and|or|but|for|so|yet|nor)\s+\w+',  # Conjunctions
+                r'\w+[,;]\s+\w+',  # Punctuation indicating sentence flow
+            ]
+            
+            for pattern in sentence_patterns:
+                if re.search(pattern, current_text.lower()):
+                    paragraph_indicators += 1
+                    break
+            
+            # 4. Look for text that starts or ends sentences (indicating flow)
+            for element in nearby_elements:
+                element_text = element["text"].strip()
+                element_y = element["y_position"]
+                
+                if abs(element_y - current_y) <= line_height_threshold:
+                    # Check if nearby text suggests sentence flow
+                    if (element_text.endswith('.') or element_text.endswith(',') or
+                        element_text.startswith(tuple('abcdefghijklmnopqrstuvwxyz')) or
+                        any(word in element_text.lower() for word in ['and', 'the', 'of', 'in', 'on', 'for', 'with'])):
+                        paragraph_indicators += 1
+            
+            # Decision: if we have strong evidence of paragraph context, exclude from headings
+            return paragraph_indicators >= 3
+        
+        # Check if this element is part of paragraph text
+        is_in_paragraph = is_part_of_paragraph(t, text_elements, body_text_size)
+
         # Enhanced heading detection: consider both font size AND bold formatting, but with strict filtering
         is_bold = t.get("flags", 0) & 16  # Bold flag
         is_heading_size = t["size"] in heading_levels
@@ -1242,6 +1405,7 @@ def extract_outline(pdf_path):
         # 4. Text that appears above the title
         # 5. Text that appears within detected table regions
         # 6. Table-like content (dots, abbreviations, single words)
+        # 7. Text that is part of paragraph flow (not standalone headings)
         if ((is_heading_size or is_potential_heading_by_formatting) and 
             clean_text and 
             clean_text not in title_components and
@@ -1250,7 +1414,8 @@ def extract_outline(pdf_path):
             not is_form_field and  # Exclude form fields and generic terms
             not is_table_like_content and  # Exclude table-like content
             not above_title and  # Exclude headings above the title
-            not in_table):  # Exclude text within table regions
+            not in_table and  # Exclude text within table regions
+            not is_in_paragraph):  # NEW: Exclude text that's part of paragraph flow
             
             # Determine heading level
             if is_heading_size:
