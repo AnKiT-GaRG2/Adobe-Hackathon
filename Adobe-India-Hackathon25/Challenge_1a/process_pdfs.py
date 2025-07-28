@@ -261,7 +261,31 @@ def is_form_field_or_generic_term(text):
         # Legal terms
         'lawyer', 'judge', 'court',
         'case', 'claim', 'settlement', 'contract',
+        
+        # Government/official terms
+        'officer', 'official', 'servant', 'employee', 'staff',
+        'government', 'ministry', 'department', 'bureau', 'agency',
     }
+    
+    # Multi-word form field patterns that should be excluded
+    form_field_patterns = [
+        r'signature\s+of\s+',  # "Signature of Government Servant"
+        r'name\s+of\s+',       # "Name of applicant"
+        r'address\s+of\s+',    # "Address of employee"
+        r'date\s+of\s+',       # "Date of application"
+        r'place\s+of\s+',      # "Place of birth"
+        r'certified\s+that',   # "Certified that..."
+        r'i\s+hereby\s+',      # "I hereby certify..."
+        r'this\s+is\s+to\s+',  # "This is to certify..."
+        r'seal\s+of\s+',       # "Seal of office"
+        r'stamp\s+of\s+',      # "Stamp of authority"
+        r'approval\s+of\s+',   # "Approval of competent authority"
+        r'recommendation\s+of\s+',  # "Recommendation of..."
+        r'verified\s+by\s+',   # "Verified by..."
+        r'checked\s+by\s+',    # "Checked by..."
+        r'forwarded\s+',       # "Forwarded with recommendation"
+        r'countersigned\s+',   # "Countersigned"
+    ]
     
     # Check if it's a single word and in our exclusion list
     if ' ' not in clean_text and clean_text in form_fields_and_generic_terms:
@@ -277,6 +301,11 @@ def is_form_field_or_generic_term(text):
     
     if re.match(r'^[a-z]$', clean_text):  # Single letters
         return True
+    
+    # Check for multi-word form field patterns
+    for pattern in form_field_patterns:
+        if re.search(pattern, clean_text, re.IGNORECASE):
+            return True
     
     return False
 
@@ -969,17 +998,49 @@ def extract_outline(pdf_path):
     # Sort unique sizes (largest first)
     unique_sizes = sorted(set(sizes), reverse=True)
     heading_levels = {}
-    level_names = ["H1", "H2", "H3"]
+    level_names = ["H1", "H2", "H3", "H4"]
 
-    # Only assign heading levels to sizes that are SIGNIFICANTLY larger than body text
-    # and skip the largest size (which is likely the title)
+    # More sophisticated heading detection that considers both font size AND formatting
     title_size = unique_sizes[0] if unique_sizes else body_text_size
     
-    heading_candidate_sizes = [sz for sz in unique_sizes[1:] if sz > body_text_size]
+    # Instead of just using the largest sizes, consider:
+    # 1. Sizes significantly larger than body text
+    # 2. Sizes that appear with bold formatting frequently
     
-    # Initial font-size based level assignment
-    for i, sz in enumerate(heading_candidate_sizes[:3]):
-        heading_levels[sz] = level_names[i]
+    # Analyze which font sizes are used with bold formatting
+    bold_font_usage = {}
+    for t in text_elements:
+        size = t["size"]
+        is_bold = t.get("flags", 0) & 16  # Bold flag
+        if size not in bold_font_usage:
+            bold_font_usage[size] = {"total": 0, "bold": 0}
+        bold_font_usage[size]["total"] += 1
+        if is_bold:
+            bold_font_usage[size]["bold"] += 1
+    
+    # Find sizes that are frequently used with bold (likely heading sizes)
+    heading_candidate_sizes = []
+    
+    # Add sizes significantly larger than body text
+    for sz in unique_sizes:
+        if sz > body_text_size * 1.2:  # 20% larger than body text
+            heading_candidate_sizes.append(sz)
+    
+    # Add sizes that are frequently bold (even if not much larger)
+    for size, usage in bold_font_usage.items():
+        if usage["total"] >= 3 and usage["bold"] / usage["total"] > 0.5:  # More than 50% bold usage
+            if size >= body_text_size * 0.9 and size not in heading_candidate_sizes:  # At least 90% of body text size
+                heading_candidate_sizes.append(size)
+    
+    # Sort by size (largest first) and assign levels
+    heading_candidate_sizes = sorted(set(heading_candidate_sizes), reverse=True)
+    
+    # Skip the absolute largest size (likely title) but include others
+    for i, sz in enumerate(heading_candidate_sizes):
+        if sz == title_size:
+            continue  # Skip title size
+        if len(heading_levels) < len(level_names):
+            heading_levels[sz] = level_names[len(heading_levels)]
 
     title = ""
     outline = []
@@ -1128,6 +1189,15 @@ def extract_outline(pdf_path):
 
         # Check if this is a form field or generic term (exclude from headings)
         is_form_field = is_form_field_or_generic_term(text) or is_form_field_or_generic_term(clean_text)
+        
+        # Additional check for table-like content
+        is_table_like_content = (
+            re.match(r'^[\.\u2026\s]+$', clean_text) or  # Just dots/ellipsis (using Unicode)
+            re.match(r'^[A-Z]\.?[A-Z]?\.?[A-Z]?o?\.?$', clean_text) or  # Abbreviations like "S.No"
+            clean_text.lower() in ['s.no', 'sl.no', 'sr.no', 'no.', 'sn', 'amount', 'total', 'subtotal'] or
+            len(clean_text) == 1 or  # Single characters
+            (len(clean_text.split()) == 1 and len(clean_text) <= 4)  # Very short single words
+        )
 
         # Check if this text appears above the title (exclude such text from being headings)
         above_title = False
@@ -1146,24 +1216,53 @@ def extract_outline(pdf_path):
         # Check if this text is within a detected table region
         in_table = is_text_in_table(t, table_regions)
 
+        # Enhanced heading detection: consider both font size AND bold formatting, but with strict filtering
+        is_bold = t.get("flags", 0) & 16  # Bold flag
+        is_heading_size = t["size"] in heading_levels
+        
+        # More restrictive criteria for bold-based heading detection
+        is_potential_heading_by_formatting = (
+            is_bold and 
+            t["size"] >= body_text_size * 1.0 and  # At least body text size
+            len(clean_text.split()) >= 2 and  # At least 2 words (exclude "S.No", single words)
+            len(clean_text.split()) <= 12 and  # Reasonable heading length
+            not re.match(r'^[A-Z]\.?[A-Z]?\.?[A-Z]?o?\.?$', clean_text) and  # Exclude abbreviations like "S.No"
+            not clean_text.lower() in ['name', 'date', 'signature', 'remarks', 'amount', 'total'] and  # Exclude form fields
+            not re.match(r'^[\.\u2026]+$', clean_text) and  # Exclude dots/ellipsis
+            not re.match(r'^[\.\u2026\s]+$', clean_text)  # Exclude dots/ellipsis with spaces
+        )
+
         # Collect potential heading elements, but exclude:
         # 1. Text that appears too frequently (more than 5 times anywhere in the PDF)
         # 2. Any text containing dates in any format (comprehensive date detection)
         # 3. Form fields and generic single-word terms (name, date, address, etc.)
         # 4. Text that appears above the title
-        # 5. Text that appears on the right side of the page
-        # 6. Text that appears within detected table regions
-        if (t["size"] in heading_levels and 
+        # 5. Text that appears within detected table regions
+        # 6. Table-like content (dots, abbreviations, single words)
+        if ((is_heading_size or is_potential_heading_by_formatting) and 
             clean_text and 
             clean_text not in title_components and
             all_text_frequency[clean_text] <= 5 and  # Changed from 3 to 5 and using all_text_frequency
             not is_date and  # Exclude dates from headings
             not is_form_field and  # Exclude form fields and generic terms
+            not is_table_like_content and  # Exclude table-like content
             not above_title and  # Exclude headings above the title
-            not on_right_side and  # Exclude headings on the right side of the page
             not in_table):  # Exclude text within table regions
+            
+            # Determine heading level
+            if is_heading_size:
+                level = heading_levels[t["size"]]
+            else:
+                # For bold formatting headings, assign level based on context
+                if t["size"] > body_text_size * 1.1:
+                    level = "H2"
+                elif text.strip().endswith(':') or len(text.strip().split()) <= 5:
+                    level = "H3"
+                else:
+                    level = "H4"
+            
             potential_headings.append({
-                "level": heading_levels[t["size"]],
+                "level": level,
                 "text": text.strip() if has_numbering else clean_text,  # Preserve original text for numbered headings
                 "page": t["page"],
                 "size": t["size"],
