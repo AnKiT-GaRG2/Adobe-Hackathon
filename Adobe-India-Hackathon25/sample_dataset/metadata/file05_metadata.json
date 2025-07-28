@@ -1,0 +1,84 @@
+{
+  "file_info": {
+    "filename": "file05.pdf",
+    "file_size_bytes": 984239,
+    "extraction_timestamp": "2025-07-27T22:11:29.581943"
+  },
+  "document_properties": {
+    "title": "TOPJUMP - PARTY INVITATION 20161003 V01.cdr",
+    "author": "Art",
+    "subject": "",
+    "creator": "CorelDRAW X6",
+    "producer": "Adobe Acrobat Pro DC (32-bit) 21 Paper Capture Plug-in",
+    "creation_date": "D:20161021124306-04'00'",
+    "modification_date": "D:20250715114143+05'30'",
+    "keywords": ""
+  },
+  "extracted_structure": {
+    "title": {
+      "text": "",
+      "text_with_hex": "",
+      "font_size": null,
+      "character_count": 0,
+      "word_count": 0,
+      "components": []
+    },
+    "headings": [
+      {
+        "level": "H3",
+        "text": "HOPE",
+        "text_with_hex": "HOPE",
+        "page": 1,
+        "font_size": 22.7,
+        "font_family": "Helvetica-Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 4,
+        "word_count": 1,
+        "position_on_page": {
+          "x": 33.418800354003906,
+          "y": 598.6004028320312
+        }
+      }
+    ],
+    "structure_summary": {
+      "total_headings": 1,
+      "headings_by_level": {
+        "H3": 1
+      },
+      "pages_with_headings": 1,
+      "average_heading_length": 4.0,
+      "font_sizes_used": [
+        22.7
+      ],
+      "fonts_used": [
+        "Helvetica-Bold"
+      ]
+    },
+    "heading_levels_identified": {
+      "26.4": "H1",
+      "24.5": "H2",
+      "22.7": "H3"
+    }
+  },
+  "basic_analysis": {
+    "page_count": 1,
+    "total_word_count": 48,
+    "total_character_count": 323,
+    "most_common_font_size": 7.2,
+    "all_font_sizes": [
+      26.7,
+      26.4,
+      24.5,
+      22.7,
+      22.5,
+      22.0,
+      18.0,
+      12.4,
+      9.4,
+      7.4,
+      7.2
+    ],
+    "estimated_reading_time_minutes": 0.24
+  }
+}

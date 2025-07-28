@@ -1,0 +1,50 @@
+{
+  "file_info": {
+    "filename": "file01.pdf",
+    "file_size_bytes": 196534,
+    "extraction_timestamp": "2025-07-27T22:11:29.278933"
+  },
+  "document_properties": {
+    "title": "Microsoft Word - LTC_CLAIM_FORMS .doc",
+    "author": "nicsi",
+    "subject": "",
+    "creator": "PScript5.dll Version 5.2.2",
+    "producer": "Acrobat Distiller 5.0.5 (Windows)",
+    "creation_date": "D:20110106103519+05'30'",
+    "modification_date": "D:20250715113305+05'30'",
+    "keywords": ""
+  },
+  "extracted_structure": {
+    "title": {
+      "text": "Application form for grant of LTC advance",
+      "text_with_hex": "Application form for grant of LTC advance",
+      "font_size": 11.7,
+      "character_count": 41,
+      "word_count": 7,
+      "components": [
+        "Application form for grant of LTC advance"
+      ]
+    },
+    "headings": [],
+    "structure_summary": {
+      "total_headings": 0,
+      "headings_by_level": {},
+      "pages_with_headings": 0,
+      "average_heading_length": 0,
+      "font_sizes_used": [],
+      "fonts_used": []
+    },
+    "heading_levels_identified": {}
+  },
+  "basic_analysis": {
+    "page_count": 1,
+    "total_word_count": 221,
+    "total_character_count": 1252,
+    "most_common_font_size": 9.7,
+    "all_font_sizes": [
+      11.7,
+      9.7
+    ],
+    "estimated_reading_time_minutes": 1.1
+  }
+}

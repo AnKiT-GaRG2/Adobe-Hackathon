@@ -1,0 +1,329 @@
+{
+  "file_info": {
+    "filename": "file02.pdf",
+    "file_size_bytes": 661648,
+    "extraction_timestamp": "2025-07-27T22:11:29.432941"
+  },
+  "document_properties": {
+    "title": "ISTQB Expert Level Modules Overview",
+    "author": "Graham Bath",
+    "subject": "",
+    "creator": "Microsoft® Word 2010",
+    "producer": "Microsoft® Word 2010",
+    "creation_date": "D:20140517140759+12'00'",
+    "modification_date": "D:20250715114233+05'30'",
+    "keywords": ""
+  },
+  "extracted_structure": {
+    "title": {
+      "text": "Overview Foundation Level Extensions",
+      "text_with_hex": "Overview Foundation Level Extensions",
+      "font_size": 24.0,
+      "character_count": 36,
+      "word_count": 4,
+      "components": [
+        "Overview",
+        "Foundation Level Extensions"
+      ]
+    },
+    "headings": [
+      {
+        "level": "H1",
+        "text": "International Software Testing Qualifications Board",
+        "text_with_hex": "International Software Testing Qualifications Board",
+        "page": 1,
+        "font_size": 18.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 51,
+        "word_count": 5,
+        "position_on_page": {
+          "x": 103.33999633789062,
+          "y": 462.6399841308594
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Revision History",
+        "text_with_hex": "Revision History",
+        "page": 3,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 16,
+        "word_count": 2,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 106.30280303955078
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Table of Contents",
+        "text_with_hex": "Table of Contents",
+        "page": 4,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 17,
+        "word_count": 3,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 106.30280303955078
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Acknowledgements",
+        "text_with_hex": "Acknowledgements",
+        "page": 5,
+        "font_size": 16.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 16,
+        "word_count": 1,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 106.22300720214844
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Introduction to the Foundation Level Extensions",
+        "text_with_hex": "Introduction to the Foundation Level Extensions",
+        "page": 6,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 47,
+        "word_count": 6,
+        "position_on_page": {
+          "x": 93.62316131591797,
+          "y": 120.34278106689453
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Introduction to Foundation Level Agile Tester Extension",
+        "text_with_hex": "Introduction to Foundation Level Agile Tester Extension",
+        "page": 7,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 55,
+        "word_count": 7,
+        "position_on_page": {
+          "x": 93.62316131591797,
+          "y": 120.34278106689453
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Intended Audience",
+        "text_with_hex": "Intended Audience",
+        "page": 7,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 17,
+        "word_count": 2,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 214.9669952392578
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Career Paths for Testers Learning Objectives",
+        "text_with_hex": "Career Paths for Testers Learning Objectives",
+        "page": 7,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 44,
+        "word_count": 6,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 482.13702392578125
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Entry Requirements",
+        "text_with_hex": "Entry Requirements",
+        "page": 8,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 18,
+        "word_count": 2,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 154.6070098876953
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Structure and Course Duration",
+        "text_with_hex": "Structure and Course Duration",
+        "page": 8,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 29,
+        "word_count": 4,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 214.7270050048828
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Keeping It Current",
+        "text_with_hex": "Keeping It Current",
+        "page": 9,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 18,
+        "word_count": 3,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 131.5669708251953
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Overview of the Foundation Level Extension – Agile Tester Syllabus",
+        "text_with_hex": "Overview of the Foundation Level Extension \\x{2013} Agile Tester Syllabus",
+        "page": 10,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 66,
+        "word_count": 10,
+        "position_on_page": {
+          "x": 93.62316131591797,
+          "y": 117.22278594970703
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Business Outcomes Content",
+        "text_with_hex": "Business Outcomes Content",
+        "page": 10,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 25,
+        "word_count": 3,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 185.5669708251953
+        }
+      },
+      {
+        "level": "H2",
+        "text": "References",
+        "text_with_hex": "References",
+        "page": 12,
+        "font_size": 16.0,
+        "font_family": "Arial,Bold",
+        "is_bold": true,
+        "is_italic": false,
+        "character_count": 10,
+        "word_count": 1,
+        "position_on_page": {
+          "x": 93.62316131591797,
+          "y": 120.34278106689453
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Trademarks",
+        "text_with_hex": "Trademarks",
+        "page": 12,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 10,
+        "word_count": 1,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 169.00697326660156
+        }
+      },
+      {
+        "level": "H3",
+        "text": "Documents and Web Sites",
+        "text_with_hex": "Documents and Web Sites",
+        "page": 12,
+        "font_size": 14.0,
+        "font_family": "Arial",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 23,
+        "word_count": 4,
+        "position_on_page": {
+          "x": 70.94400024414062,
+          "y": 255.0769805908203
+        }
+      }
+    ],
+    "structure_summary": {
+      "total_headings": 16,
+      "headings_by_level": {
+        "H1": 1,
+        "H2": 7,
+        "H3": 8
+      },
+      "pages_with_headings": 10,
+      "average_heading_length": 28.88,
+      "font_sizes_used": [
+        16.0,
+        18.0,
+        14.0
+      ],
+      "fonts_used": [
+        "Arial",
+        "Arial,Bold"
+      ]
+    },
+    "heading_levels_identified": {
+      "18.0": "H1",
+      "16.0": "H2",
+      "14.0": "H3"
+    }
+  },
+  "basic_analysis": {
+    "page_count": 12,
+    "total_word_count": 2385,
+    "total_character_count": 17925,
+    "most_common_font_size": 10.0,
+    "all_font_sizes": [
+      24.0,
+      18.0,
+      16.0,
+      14.0,
+      12.0,
+      10.0,
+      6.5,
+      6.0
+    ],
+    "estimated_reading_time_minutes": 11.93
+  }
+}

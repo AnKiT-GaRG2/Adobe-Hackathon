@@ -1,0 +1,174 @@
+{
+  "file_info": {
+    "filename": "file03.pdf",
+    "file_size_bytes": 643624,
+    "extraction_timestamp": "2025-07-27T22:11:29.531931"
+  },
+  "document_properties": {
+    "title": "To Present a Proposal for Developing the Business Plan for the Ontario Digital Library",
+    "author": "",
+    "subject": "",
+    "creator": "",
+    "producer": "Acrobat Distiller 4.0 for Windows",
+    "creation_date": "D:20030321152338Z",
+    "modification_date": "D:20250715114141+05'30'",
+    "keywords": ""
+  },
+  "extracted_structure": {
+    "title": {
+      "text": "RFP: R RFP: R RFP: R RFP: Reeeequest f quest f",
+      "text_with_hex": "RFP: R RFP: R RFP: R RFP: Reeeequest f quest f",
+      "font_size": 32.0,
+      "character_count": 46,
+      "word_count": 11,
+      "components": [
+        "RFP: R",
+        "RFP: R",
+        "RFP: R",
+        "RFP: Reeeequest f",
+        "quest f"
+      ]
+    },
+    "headings": [
+      {
+        "level": "H3",
+        "text": "Ontario’s Libraries Working Together",
+        "text_with_hex": "Ontario\\x{2019}s Libraries Working Together",
+        "page": 1,
+        "font_size": 16.0,
+        "font_family": "Arial-Black",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 36,
+        "word_count": 4,
+        "position_on_page": {
+          "x": 95.44059753417969,
+          "y": 72.48301696777344
+        }
+      },
+      {
+        "level": "H1",
+        "text": "To Present a Proposal for Developing",
+        "text_with_hex": "To Present a Proposal for Developing",
+        "page": 1,
+        "font_size": 24.0,
+        "font_family": "ArialMT",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 36,
+        "word_count": 6,
+        "position_on_page": {
+          "x": 131.80059814453125,
+          "y": 244.3199920654297
+        }
+      },
+      {
+        "level": "H1",
+        "text": "the Business Plan for the Ontario Digital Library",
+        "text_with_hex": "the Business Plan for the Ontario Digital Library",
+        "page": 1,
+        "font_size": 24.0,
+        "font_family": "ArialMT",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 49,
+        "word_count": 8,
+        "position_on_page": {
+          "x": 131.80059814453125,
+          "y": 271.9200134277344
+        }
+      },
+      {
+        "level": "H2",
+        "text": "March 21, 2003",
+        "text_with_hex": "March 21, 2003",
+        "page": 1,
+        "font_size": 20.0,
+        "font_family": "ArialMT",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 14,
+        "word_count": 3,
+        "position_on_page": {
+          "x": 238.2406005859375,
+          "y": 339.0570068359375
+        }
+      },
+      {
+        "level": "H2",
+        "text": "Ontario’s Digital Library",
+        "text_with_hex": "Ontario\\x{2019}s Digital Library",
+        "page": 2,
+        "font_size": 20.0,
+        "font_family": "Arial-Black",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 25,
+        "word_count": 3,
+        "position_on_page": {
+          "x": 90.04060363769531,
+          "y": 89.09701538085938
+        }
+      },
+      {
+        "level": "H3",
+        "text": "A Critical Component for Implementing Ontario’s Road Map to Prosperity Strategy",
+        "text_with_hex": "A Critical Component for Implementing Ontario\\x{2019}s Road Map to Prosperity Strategy",
+        "page": 2,
+        "font_size": 16.0,
+        "font_family": "ArialMT",
+        "is_bold": false,
+        "is_italic": false,
+        "character_count": 79,
+        "word_count": 11,
+        "position_on_page": {
+          "x": 90.04060363769531,
+          "y": 117.60289001464844
+        }
+      }
+    ],
+    "structure_summary": {
+      "total_headings": 6,
+      "headings_by_level": {
+        "H3": 2,
+        "H1": 2,
+        "H2": 2
+      },
+      "pages_with_headings": 2,
+      "average_heading_length": 39.83,
+      "font_sizes_used": [
+        16.0,
+        24.0,
+        20.0
+      ],
+      "fonts_used": [
+        "Arial-Black",
+        "ArialMT"
+      ]
+    },
+    "heading_levels_identified": {
+      "24.0": "H1",
+      "20.0": "H2",
+      "16.0": "H3"
+    }
+  },
+  "basic_analysis": {
+    "page_count": 14,
+    "total_word_count": 4630,
+    "total_character_count": 31168,
+    "most_common_font_size": 11.0,
+    "all_font_sizes": [
+      32.0,
+      24.0,
+      20.0,
+      16.0,
+      12.0,
+      11.0,
+      10.0,
+      9.0,
+      7.6,
+      7.0
+    ],
+    "estimated_reading_time_minutes": 23.15
+  }
+}
