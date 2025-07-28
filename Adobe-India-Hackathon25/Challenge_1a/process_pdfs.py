@@ -161,6 +161,148 @@ def is_mixed_with_body_text(current_text_element, all_text_elements, threshold_d
     
     return nearby_body_text_found
 
+def has_long_numbers(text):
+    """
+    Check if text contains numbers with more than 4 characters
+    Returns True if text has long numbers (except hex Unicode)
+    """
+    if not text:
+        return False
+    
+    # Find all number sequences in the text
+    number_pattern = r'\d{5,}'  # 5 or more consecutive digits
+    numbers = re.findall(number_pattern, text)
+    
+    if not numbers:
+        return False
+    
+    # Check if any long number is NOT a hex Unicode representation
+    for number in numbers:
+        # Check if it's part of a hex Unicode pattern like \x{1234} or \\x{1234}
+        hex_unicode_pattern = r'\\x\{' + re.escape(number) + r'\}'
+        if not re.search(hex_unicode_pattern, text):
+            return True  # Found a long number that's not hex Unicode
+    
+    return False
+
+def group_text_by_lines(text_elements):
+    """
+    Group text elements that appear on the same line
+    Returns a list of line groups, where each group contains text elements on the same line
+    """
+    # Group by page and approximate y-position (allowing small variations for same line)
+    line_groups = {}
+    
+    for element in text_elements:
+        page = element["page"]
+        y_pos = element.get("y_position", 0)
+        
+        # Round y-position to group elements on approximately the same line
+        # Allow 5 pixel tolerance for elements on the same line
+        line_key = (page, round(y_pos / 5) * 5)
+        
+        if line_key not in line_groups:
+            line_groups[line_key] = []
+        line_groups[line_key].append(element)
+    
+    # Sort elements within each line by x-position (left to right)
+    for line_key in line_groups:
+        line_groups[line_key].sort(key=lambda x: x.get("x_position", 0))
+    
+    return list(line_groups.values())
+
+def is_valid_heading_line(line_elements, heading_levels, all_text_frequency, title_components):
+    """
+    Check if an entire line can be considered a valid heading
+    Line-based logic: If 2 words lie in the same line, they should be treated as one sentence
+    A heading is considered valid if the complete line meets heading criteria as a unit
+    """
+    if not line_elements:
+        return False
+    
+    # Combine all text in the line to form the complete sentence
+    line_text_parts = []
+    heading_size_count = 0
+    total_elements = 0
+    
+    for element in line_elements:
+        text = element["text"].strip()
+        if text:
+            line_text_parts.append(text)
+            total_elements += 1
+            # Count elements with heading-level font size
+            if element["size"] in heading_levels:
+                heading_size_count += 1
+    
+    # Require at least some elements to have heading-level font size
+    # But be more flexible - if most words are heading size, accept the line
+    if heading_size_count == 0:
+        return False  # Must have at least one heading-sized word
+    
+    # Form the complete line text for validation
+    complete_line_text = " ".join(line_text_parts)
+    clean_line_text = re.sub(r"^[0-9.\-\u2013\u2014\)\(©®™]+\s*", "", complete_line_text).strip()
+    
+    # Apply validation to the complete line as a unit (implementing your line-based requirement)
+    
+    # Check basic length
+    if len(complete_line_text.strip()) < 3:
+        return False
+    
+    # Skip empty or title component lines
+    if not clean_line_text or clean_line_text in title_components:
+        return False
+    
+    # Check frequency of the complete line text (not individual words)
+    if all_text_frequency.get(clean_line_text, 0) > 5:
+        return False
+    
+    # Check if the complete line contains dates
+    if contains_date(complete_line_text) or contains_date(clean_line_text):
+        return False
+    
+    # Check if the complete line contains mixed content
+    if contains_mixed_content(complete_line_text):
+        return False
+    
+    # Check if the complete line ends with punctuation
+    if complete_line_text.strip().endswith((':', '.', ';', ':-', '!', '?')):
+        return False
+    
+    # Check if the complete line has long numbers
+    if has_long_numbers(complete_line_text):
+        return False
+    
+    # Check word count for the complete line
+    word_count = len(clean_line_text.split())
+    if word_count > 20:
+        return False
+    
+    # For single words, still apply individual validation (your existing logic)
+    if word_count == 1:
+        # Apply stricter validation for single words
+        single_word = clean_line_text
+        if is_form_field_or_generic_term(single_word):
+            return False
+    
+    # Additional line-based validation: check for common non-heading patterns
+    # Skip lines that look like body text even if they have some heading-sized words
+    line_lower = complete_line_text.lower()
+    
+    # Skip lines with too many body text indicators (implementing your sentence-based logic)
+    body_text_indicators = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
+    indicator_count = sum(1 for indicator in body_text_indicators if f' {indicator} ' in f' {line_lower} ')
+    
+    # If the line has many body text indicators, be more strict about heading size requirement
+    if indicator_count > 0:
+        # For lines with common words, require higher proportion of heading-sized elements
+        required_proportion = 0.7  # 70% must be heading-sized
+        if (heading_size_count / total_elements) < required_proportion:
+            return False
+    
+    # If we get here, the complete line passed all heading criteria
+    return True
+
 def contains_mixed_content(text):
     """
     Check if text contains mixed content (heading-style text mixed with normal paragraph text)
@@ -654,78 +796,72 @@ def extract_outline(pdf_path):
         if clean_text:
             all_text_frequency[clean_text] += 1
     
-    # Now collect potential heading elements, excluding frequently repeated text
-    for t in text_elements:
-        text = t["text"]
-        if not text or len(text) < 2:
-            continue
-
-        # Clean text by removing numbering/bullets AND copyright symbols (including Unicode dashes)
-        clean_text = re.sub(r"^[0-9.\-\u2013\u2014\)\(©®™]+\s*", "", text).strip()
+    # Now use line-based heading detection
+    # Group text elements by lines
+    line_groups = group_text_by_lines(text_elements)
+    
+    # Filter line groups to find valid heading lines
+    valid_heading_lines = []
+    
+    for line_group in line_groups:
+        # Check position-based filters for the line
+        line_page = line_group[0]["page"] if line_group else 0
+        line_y_position = min(elem.get("y_position", 0) for elem in line_group)
+        line_x_position = min(elem.get("x_position", 0) for elem in line_group)
+        line_relative_x = min(elem.get("relative_x", 0) for elem in line_group)
         
-        # Check if the original text has numbering (before cleaning)
-        has_numbering = bool(re.match(r"^[0-9]+(\.[0-9]+)*[\.\s]", text.strip()))
-        
-        # Check if this text contains any date format (exclude dates from headings)
-        # Use comprehensive date detection that covers all common date formats
-        is_date = contains_date(text) or contains_date(clean_text)
-
-        # Check if this is a form field or generic term (exclude from headings)
-        is_form_field = is_form_field_or_generic_term(text) or is_form_field_or_generic_term(clean_text)
-
-        # Check if this text appears above the title (exclude such text from being headings)
+        # Check if this line appears above the title (exclude such lines from being headings)
         above_title = False
         if title_y_position is not None and title_page is not None:
-            if t["page"] == title_page and t["y_position"] < title_y_position:
+            if line_page == title_page and line_y_position < title_y_position:
                 above_title = True
-            elif t["page"] < title_page:
+            elif line_page < title_page:
                 above_title = True
 
-        # Check if this text appears on the right side of the page (exclude from headings)
-        # Headings typically appear on the left side or center, not on the right side
-        # Text appearing on the right side is usually page numbers, headers, footers, or sidebar content
-        # Using 70% as threshold: text starting beyond 70% of page width is considered right-side
-        on_right_side = t["relative_x"] > 0.7  # Configurable threshold for right-side detection
-
-        # Check word count - headings should not have more than 20 words
-        word_count = len(clean_text.split())
-
-        # Check if text contains mixed content (heading mixed with normal text)
-        has_mixed_content = contains_mixed_content(text)
-
-        # Check if text ends with punctuation (headings should not end with : . ; :- etc.)
-        ends_with_punctuation = text.strip().endswith((':', '.', ';', ':-', '!', '?'))
-
-        # Collect potential heading elements, but exclude:
-        # 1. Text that appears too frequently (more than 5 times anywhere in the PDF)
-        # 2. Any text containing dates in any format (comprehensive date detection)
-        # 3. Form fields and generic single-word terms (name, date, address, etc.)
-        # 4. Text that appears above the title
-        # 5. Text that appears on the right side of the page
-        # 6. Text with more than 20 words
-        # 7. Text that contains mixed content (heading mixed with normal text)
-        # 8. Text that ends with punctuation marks
-        if (t["size"] in heading_levels and 
-            clean_text and 
-            clean_text not in title_components and
-            all_text_frequency[clean_text] <= 5 and  # Changed from 3 to 5 and using all_text_frequency
-            not is_date and  # Exclude dates from headings
-            not is_form_field and  # Exclude form fields and generic terms
-            not above_title and  # Exclude headings above the title
-            not on_right_side and  # Exclude headings on the right side of the page
-            word_count <= 20 and  # Exclude text with more than 20 words
-            not has_mixed_content and  # Exclude text with mixed content
-            not ends_with_punctuation):  # Exclude text ending with punctuation
-            potential_headings.append({
-                "level": heading_levels[t["size"]],
-                "text": text.strip() if has_numbering else clean_text,  # Preserve original text for numbered headings
-                "page": t["page"],
-                "size": t["size"],
-                "original_text": text.strip(),
-                "has_numbering": has_numbering,
-                "y_position": t["y_position"],  # Add position for checking text between headings
-                "x_position": t["x_position"]   # Add x position for reference
-            })
+        # Check if this line appears on the right side of the page (exclude from headings)
+        on_right_side = line_relative_x > 0.7
+        
+        # Skip lines that are positioned poorly
+        if above_title or on_right_side:
+            continue
+        
+        # Check if this entire line can be considered a valid heading
+        if is_valid_heading_line(line_group, heading_levels, all_text_frequency, title_components):
+            # Combine all text elements in the line to form the complete heading
+            line_text_parts = []
+            has_numbering = False
+            heading_size = None
+            
+            for element in line_group:
+                text = element["text"].strip()
+                if text:
+                    line_text_parts.append(text)
+                    
+                    # Check if any element has numbering
+                    if re.match(r"^[0-9]+(\.[0-9]+)*[\.\s]", text):
+                        has_numbering = True
+                    
+                    # Get the heading size (use the largest size in the line)
+                    if element["size"] in heading_levels:
+                        if heading_size is None or element["size"] > heading_size:
+                            heading_size = element["size"]
+            
+            if line_text_parts and heading_size is not None:
+                complete_line_text = " ".join(line_text_parts)
+                
+                # Clean the complete text
+                clean_line_text = re.sub(r"^[0-9.\-\u2013\u2014\)\(©®™]+\s*", "", complete_line_text).strip()
+                
+                potential_headings.append({
+                    "level": heading_levels[heading_size],
+                    "text": complete_line_text.strip() if has_numbering else clean_line_text,
+                    "page": line_page,
+                    "size": heading_size,
+                    "original_text": complete_line_text.strip(),
+                    "has_numbering": has_numbering,
+                    "y_position": line_y_position,
+                    "x_position": line_x_position
+                })
     
     # Reassign heading levels based on numbering hierarchy (overrides font-size levels)
     def get_numbering_level(text):
