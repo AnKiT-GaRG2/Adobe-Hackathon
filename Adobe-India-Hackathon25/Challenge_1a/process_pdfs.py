@@ -81,6 +81,195 @@ def convert_special_chars_to_hex(text):
     
     return hex_text
 
+def is_mixed_with_body_text(current_text_element, all_text_elements, threshold_distance=30):
+    """
+    Check if a potential heading appears together with normal body text
+    Returns True if the text is mixed with or too close to body text
+    """
+    current_page = current_text_element["page"]
+    current_x = current_text_element.get("x_position", 0)
+    current_y = current_text_element.get("y_position", 0)
+    current_size = current_text_element["size"]
+    current_text = current_text_element["text"].strip()
+    
+    # Don't apply this check to very short headings (they're likely legitimate)
+    if len(current_text.split()) <= 3:
+        return False
+    
+    # Don't apply this check to headings that end with colons (they're likely legitimate)
+    if current_text.endswith(':'):
+        return False
+    
+    # Don't apply this check to all-caps text (likely legitimate headings)
+    if current_text.isupper():
+        return False
+    
+    # Get all text elements on the same page
+    same_page_elements = [t for t in all_text_elements if t["page"] == current_page]
+    
+    # Look for nearby text elements that appear to be body text
+    nearby_body_text_found = False
+    
+    for element in same_page_elements:
+        if element == current_text_element:
+            continue
+            
+        element_text = element["text"].strip()
+        element_size = element["size"]
+        element_x = element.get("x_position", 0)
+        element_y = element.get("y_position", 0)
+        
+        # Skip if this is also a potential heading (same size as current)
+        if element_size == current_size:
+            continue
+            
+        # Calculate distance between text elements
+        x_distance = abs(current_x - element_x)
+        y_distance = abs(current_y - element_y)
+        
+        # Check if nearby element is clearly body text (longer, sentence-like)
+        is_clear_body_text = (
+            len(element_text.split()) > 20 and  # Very long text
+            (element_text.count(',') >= 3 or    # Multiple commas
+             element_text.count('.') >= 2) and  # Multiple periods
+            any(word in element_text.lower() for word in [
+                'students', 'provide', 'ensure', 'develop', 'create', 'establish',
+                'implement', 'support', 'enhance', 'improve', 'maintain', 'continue',
+                'experience', 'understanding', 'knowledge', 'skills', 'opportunity',
+                'through', 'within', 'including', 'between', 'during', 'various',
+                'concentrate', 'required', 'beyond', 'areas', 'science', 'mathematics'
+            ])
+        )
+        
+        # If we found clear body text very close to our potential heading
+        if is_clear_body_text and y_distance < threshold_distance:
+            nearby_body_text_found = True
+            break
+    
+    # Also check if the current text itself shows strong signs of being mixed with body text
+    # Look for patterns like "Title: Very long explanatory text that goes on and on..."
+    if ':' in current_text:
+        parts = current_text.split(':', 1)
+        if len(parts) == 2 and len(parts[1].strip().split()) > 15:
+            return True
+    
+    # Check for text that has too many sentence-like characteristics
+    if len(current_text.split()) > 10:
+        sentence_indicators = current_text.lower().count('and') + current_text.lower().count('or') + current_text.count(',')
+        if sentence_indicators >= 3:
+            return True
+    
+    return nearby_body_text_found
+
+def contains_mixed_content(text):
+    """
+    Check if text contains mixed content (heading-style text mixed with normal paragraph text)
+    Returns True if the text appears to contain both heading-style and paragraph-style content
+    """
+    if not text or len(text.strip()) < 10:
+        return False
+    
+    text = text.strip()
+    
+    # Check for incomplete sentences (typical of paragraph fragments mixed in)
+    # Text ending with prepositions, articles, or incomplete phrases
+    incomplete_endings = [
+        'to', 'and', 'or', 'of', 'in', 'for', 'with', 'at', 'by', 'from', 'on', 'as',
+        'the', 'a', 'an', 'this', 'that', 'these', 'those', 'will', 'would', 'should',
+        'can', 'could', 'may', 'might', 'must', 'shall', 'about', 'after', 'before',
+        'during', 'through', 'within', 'without', 'under', 'over', 'between', 'among'
+    ]
+    
+    # Check if text ends with incomplete words (suggests it's part of a larger sentence)
+    last_word = text.split()[-1].lower().rstrip('.,!?;:')
+    if last_word in incomplete_endings:
+        return True
+    
+    # Check if text ends with a comma (indicates it's part of a larger sentence)
+    if text.rstrip().endswith(','):
+        return True
+    
+    # Check for paragraph-style characteristics
+    # Long sentences with multiple clauses
+    if len(text.split()) > 8 and (',' in text or 'and' in text.lower()):
+        # Check if it reads like a sentence rather than a heading
+        sentence_indicators = [
+            'students', 'provide', 'ensure', 'develop', 'create', 'establish',
+            'implement', 'support', 'enhance', 'improve', 'maintain', 'continue',
+            'opportunity', 'experience', 'understanding', 'knowledge', 'skills',
+            'concentrate', 'required', 'beyond', 'areas', 'science', 'technology',
+            'engineering', 'mathematics', 'expose', 'relevant', 'real', 'world'
+        ]
+        
+        text_lower = text.lower()
+        if any(indicator in text_lower for indicator in sentence_indicators):
+            return True
+    
+    # Check for text that starts with lowercase (likely continuation of previous sentence)
+    if text[0].islower():
+        return True
+    
+    # Check for comma-separated clauses (typical of paragraph text)
+    comma_count = text.count(',')
+    if comma_count >= 2 and len(text.split()) > 10:
+        return True
+    
+    # Split by sentences (periods, exclamation marks, question marks)
+    sentences = re.split(r'[.!?]+', text)
+    
+    # Remove empty sentences
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if len(sentences) < 2:
+        return False
+    
+    # Check if we have a mix of short heading-style sentences and longer paragraph-style sentences
+    short_sentences = 0
+    long_sentences = 0
+    
+    for sentence in sentences:
+        word_count = len(sentence.split())
+        if word_count <= 5:  # Short, heading-style
+            short_sentences += 1
+        elif word_count >= 15:  # Long, paragraph-style
+            long_sentences += 1
+    
+    # If we have both short and long sentences, it's likely mixed content
+    if short_sentences > 0 and long_sentences > 0:
+        return True
+    
+    # Also check for patterns that indicate mixed content:
+    # 1. Heading followed by explanatory text
+    # 2. Title case followed by sentence case
+    # 3. Bold/capitalized start followed by normal text
+    
+    # Check for heading patterns followed by explanatory text
+    heading_patterns = [
+        r'^[A-Z][A-Za-z\s]+:\s+[a-z]',  # "Title: explanation"
+        r'^[A-Z\s]+\.\s+[A-Z][a-z]',   # "HEADING. Explanation"
+        r'^\d+\.\s*[A-Z][A-Za-z\s]+\.\s+[A-Z][a-z]',  # "1. Title. Explanation"
+    ]
+    
+    for pattern in heading_patterns:
+        if re.search(pattern, text):
+            return True
+    
+    # Check for sudden change in capitalization style (heading + normal text)
+    words = text.split()
+    if len(words) > 10:
+        # Check if first part is all caps/title case and later part is sentence case
+        first_half = ' '.join(words[:len(words)//2])
+        second_half = ' '.join(words[len(words)//2:])
+        
+        # If first half is mostly uppercase/title case and second half is mostly lowercase
+        first_upper_ratio = sum(1 for c in first_half if c.isupper()) / max(len(first_half), 1)
+        second_upper_ratio = sum(1 for c in second_half if c.isupper()) / max(len(second_half), 1)
+        
+        if first_upper_ratio > 0.3 and second_upper_ratio < 0.1:
+            return True
+    
+    return False
+
 def contains_date(text):
     """
     Comprehensive date detection function that checks if text contains any date format
@@ -498,12 +687,24 @@ def extract_outline(pdf_path):
         # Using 70% as threshold: text starting beyond 70% of page width is considered right-side
         on_right_side = t["relative_x"] > 0.7  # Configurable threshold for right-side detection
 
+        # Check word count - headings should not have more than 20 words
+        word_count = len(clean_text.split())
+
+        # Check if text contains mixed content (heading mixed with normal text)
+        has_mixed_content = contains_mixed_content(text)
+
+        # Check if text ends with punctuation (headings should not end with : . ; :- etc.)
+        ends_with_punctuation = text.strip().endswith((':', '.', ';', ':-', '!', '?'))
+
         # Collect potential heading elements, but exclude:
         # 1. Text that appears too frequently (more than 5 times anywhere in the PDF)
         # 2. Any text containing dates in any format (comprehensive date detection)
         # 3. Form fields and generic single-word terms (name, date, address, etc.)
         # 4. Text that appears above the title
         # 5. Text that appears on the right side of the page
+        # 6. Text with more than 20 words
+        # 7. Text that contains mixed content (heading mixed with normal text)
+        # 8. Text that ends with punctuation marks
         if (t["size"] in heading_levels and 
             clean_text and 
             clean_text not in title_components and
@@ -511,7 +712,10 @@ def extract_outline(pdf_path):
             not is_date and  # Exclude dates from headings
             not is_form_field and  # Exclude form fields and generic terms
             not above_title and  # Exclude headings above the title
-            not on_right_side):  # Exclude headings on the right side of the page
+            not on_right_side and  # Exclude headings on the right side of the page
+            word_count <= 20 and  # Exclude text with more than 20 words
+            not has_mixed_content and  # Exclude text with mixed content
+            not ends_with_punctuation):  # Exclude text ending with punctuation
             potential_headings.append({
                 "level": heading_levels[t["size"]],
                 "text": text.strip() if has_numbering else clean_text,  # Preserve original text for numbered headings
@@ -683,21 +887,23 @@ def extract_outline(pdf_path):
                     break  # Don't merge if there's content between headings
                 
                 # More intelligent combination logic:
-                # 1. Always combine if next text is very short (< 20 chars)
-                # 2. Combine if next text doesn't start with a number/bullet
-                # 3. Combine if current text doesn't end with a complete sentence (no period at end)
-                # 4. Combine if both texts seem like parts of the same title/heading
+                # Only combine headings that are clearly fragments or continuations
                 should_combine = False
                 
-                if len(next_heading["text"]) < 20:
+                # Only combine if next text is very short (< 15 chars) and likely a continuation
+                if len(next_heading["text"]) < 15:
                     should_combine = True  # Short text is likely a continuation
-                elif not re.match(r'^\d+\.', next_heading["text"]):
-                    # Not starting with number, check if current text seems incomplete
-                    if not current["text"].rstrip().endswith('.'):
-                        should_combine = True  # Current doesn't end with period, likely incomplete
-                    # Also check if they look like title parts (both start with capital or "the")
-                    elif (current["text"][0].isupper() and 
-                          (next_heading["text"][0].isupper() or next_heading["text"].startswith("the"))):
+                # Or if current text clearly doesn't end properly (incomplete prepositions/conjunctions)
+                elif current["text"].rstrip().endswith(('to', 'and', 'or', 'of', 'in', 'for', 'with', 'at', 'by', 'from')):
+                    should_combine = True  # Current text ends with preposition/conjunction, needs continuation
+                # Or if current text doesn't end properly and next text doesn't start with capital
+                elif (not current["text"].rstrip().endswith(('.', ':', '!', '?')) and
+                      not next_heading["text"][0].isupper()):
+                    should_combine = True  # Current seems incomplete and next is continuation
+                # Or if they have clear word overlap indicating they're fragments of same heading
+                elif len(set(current["text"].lower().split()) & set(next_heading["text"].lower().split())) >= 2:
+                    # Only if they share 2+ words and neither is complete on its own
+                    if (len(current["text"].split()) <= 4 or len(next_heading["text"].split()) <= 4):
                         should_combine = True
                 
                 if should_combine:
@@ -708,8 +914,13 @@ def extract_outline(pdf_path):
         
         # Only add if the combined text doesn't look like fragmented parts
         # Skip very short headings that are likely fragments (including Unicode dashes)
+        # Skip headings with more than 20 words
         fragment_chars = ['\u2013', '\u2014', '-', '\u2022', '•', '\u00B7', '·']
-        if len(combined_text.strip()) > 3 and combined_text.strip() not in fragment_chars:
+        combined_word_count = len(combined_text.strip().split())
+        
+        if (len(combined_text.strip()) > 3 and 
+            combined_text.strip() not in fragment_chars and
+            combined_word_count <= 20):  # Exclude headings with more than 20 words
             consolidated_headings.append({
                 "level": current["level"],
                 "text": combined_text.strip(),
@@ -751,19 +962,39 @@ def extract_outline(pdf_path):
             # If there's any error reading metadata, continue with original logic
             pass
 
-    # Merge page 0 content with title (page 0 is always part of title)
+    # Check page 0 content and only merge with title if it matches metadata title
     page_0_content = []
     remaining_outline = []
     
+    # Get metadata title for comparison
+    try:
+        doc = fitz.open(pdf_path)
+        metadata_title = doc.metadata.get("title", "").strip()
+        doc.close()
+    except:
+        metadata_title = ""
+    
     for item in outline:
         if item["page"] == 0:
-            # Collect page 0 content to merge with title
-            page_0_content.append(item["text"])
+            # Check if page 0 content matches metadata title
+            item_text = item["text"].strip().lower()
+            metadata_title_lower = metadata_title.lower()
+            
+            # Only merge if the page 0 content matches or is contained in metadata title
+            if (metadata_title_lower and item_text and 
+                (item_text == metadata_title_lower or 
+                 item_text in metadata_title_lower or 
+                 metadata_title_lower in item_text)):
+                # This page 0 content matches metadata title, so merge it
+                page_0_content.append(item["text"])
+            else:
+                # This page 0 content doesn't match metadata title, keep it as heading
+                remaining_outline.append(item)
         else:
             # Keep items from page 1 and above in the outline
             remaining_outline.append(item)
     
-    # If we found page 0 content, merge it with the title
+    # If we found matching page 0 content, merge it with the title
     if page_0_content:
         original_title = title if title else ""
         page_0_text = " ".join(page_0_content)
@@ -773,9 +1004,9 @@ def extract_outline(pdf_path):
             title = f"{original_title} {page_0_text}"
         else:
             title = page_0_text
-        
-        # Use the filtered outline without page 0 items
-        outline = remaining_outline
+    
+    # Use the filtered outline (page 0 items that don't match metadata are kept as headings)
+    outline = remaining_outline
 
     # Convert special characters to hex in the final output
     final_title = convert_special_chars_to_hex(title if title else "Untitled Document")

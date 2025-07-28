@@ -1,9 +1,14 @@
 {
-  "title": "RFP: Request for Proposal: To Present a Proposal for Developing the Business Plan for the Ontario Digital Library",
+  "title": "RFP: Request for Proposal: To Present a Proposal for Developing Digital Library",
   "outline": [
     {
       "level": "H3",
-      "text": "Ontario\\x{2019}s Digital Library A Critical Component for Implementing Ontario\\x{2019}s Road Map to Prosperity Strategy",
+      "text": "Ontario\\x{2019}s Digital Library",
+      "page": 1
+    },
+    {
+      "level": "H3",
+      "text": "Prosperity Strategy",
       "page": 1
     }
   ]
