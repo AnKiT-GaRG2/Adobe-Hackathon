@@ -307,7 +307,10 @@ def extract_outline(pdf_path):
                             "text": normalized_text,
                             "size": round(s["size"], 1),
                             "flags": s["flags"],
-                            "page": page_num,
+                            "is_bold": bool(s["flags"] & 16),  # Flag 16 = bold
+                            "is_italic": bool(s["flags"] & 2),  # Flag 2 = italic
+                            "font": s.get("font", ""),
+                            "page": page_num - 1,  # Subtract 1 from page number as requested
                             "y_position": y_position,
                             "relative_y": relative_y,
                             "x_position": x_position,
@@ -546,6 +549,68 @@ def extract_outline(pdf_path):
             if numbering_level:
                 heading["level"] = numbering_level
     
+    # Sort headings by page and position for proper hierarchy assignment
+    potential_headings.sort(key=lambda h: (h["page"], h.get("y_position", 0)))
+    
+    # Assign proper hierarchical levels for non-numbered headings
+    def assign_proper_hierarchy(headings):
+        """Assign proper H1/H2/H3 levels ensuring correct hierarchy"""
+        if not headings:
+            return headings
+        
+        # Main section keywords that should be H1
+        main_section_keywords = [
+            'introduction', 'conclusion', 'summary', 'overview', 'background',
+            'methodology', 'results', 'discussion', 'recommendations', 'appendix',
+            'references', 'bibliography', 'acknowledgements', 'abstract',
+            'table of contents', 'contents', 'syllabus', 'revision history'
+        ]
+        
+        current_level = None
+        
+        for heading in headings:
+            text_lower = heading["text"].lower().strip()
+            is_bold = heading.get("is_bold", False)
+            size = heading.get("size", 0)
+            
+            # Skip numbered headings (they already have correct levels)
+            if heading.get("has_numbering", False):
+                current_level = heading["level"]
+                continue
+            
+            # Determine appropriate level
+            is_main_section = any(keyword in text_lower for keyword in main_section_keywords)
+            
+            if is_main_section or (is_bold and size >= body_text_size * 1.1):
+                # Main sections and large bold text -> H1
+                heading["level"] = "H1"
+                current_level = "H1"
+            elif current_level == "H1" and (is_bold and size >= body_text_size * 0.9):
+                # Following H1, bold text of reasonable size -> H2
+                heading["level"] = "H2"
+                current_level = "H2"
+            elif current_level == "H2" and (is_bold or size >= body_text_size * 0.8):
+                # Following H2, bold or reasonable size -> H3
+                heading["level"] = "H3"
+            elif current_level is None:
+                # First heading should be H1 if no context
+                heading["level"] = "H1"
+                current_level = "H1"
+            else:
+                # Default based on current context
+                if current_level == "H1":
+                    heading["level"] = "H2"
+                    current_level = "H2"
+                elif current_level == "H2":
+                    heading["level"] = "H3"
+                else:
+                    heading["level"] = "H3"
+        
+        return headings
+    
+    # Apply proper hierarchy
+    potential_headings = assign_proper_hierarchy(potential_headings)
+    
     # Helper function to check if there's text between two headings
     def has_text_between_headings(heading1, heading2, all_text_elements):
         """Check if there's body text between two headings"""
@@ -685,6 +750,32 @@ def extract_outline(pdf_path):
         except:
             # If there's any error reading metadata, continue with original logic
             pass
+
+    # Merge page 0 content with title (page 0 is always part of title)
+    page_0_content = []
+    remaining_outline = []
+    
+    for item in outline:
+        if item["page"] == 0:
+            # Collect page 0 content to merge with title
+            page_0_content.append(item["text"])
+        else:
+            # Keep items from page 1 and above in the outline
+            remaining_outline.append(item)
+    
+    # If we found page 0 content, merge it with the title
+    if page_0_content:
+        original_title = title if title else ""
+        page_0_text = " ".join(page_0_content)
+        
+        # Combine title with page 0 content
+        if original_title and original_title.strip():
+            title = f"{original_title} {page_0_text}"
+        else:
+            title = page_0_text
+        
+        # Use the filtered outline without page 0 items
+        outline = remaining_outline
 
     # Convert special characters to hex in the final output
     final_title = convert_special_chars_to_hex(title if title else "Untitled Document")
